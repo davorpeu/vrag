@@ -1,0 +1,84 @@
+{
+  "refund-policy": {
+    "title": "Acme Retail Refund Policy",
+    "versions": [
+      {
+        "version": "v1",
+        "effective_date": "2024-01-15",
+        "changed": {}
+      },
+      {
+        "version": "v2",
+        "effective_date": "2024-09-01",
+        "changed": {
+          "2.1": "Customers may request a refund within 14 days of the purchase date.",
+          "4.1": "A restocking fee of 15% applies to opened electronics.",
+          "4.2": "The restocking fee is waived for defective items."
+        }
+      },
+      {
+        "version": "v3",
+        "effective_date": "2025-04-01",
+        "changed": {
+          "2.1": "Customers may request a refund within 21 days of the purchase date.",
+          "3.1": "Refunds are issued to the original payment method within 5 business days.",
+          "1.2": null,
+          "1.3": "Gift cards are non-refundable. Digital downloads may be refunded within 48 hours if not downloaded."
+        }
+      }
+    ]
+  },
+  "leave-policy": {
+    "title": "Northwind Employee Leave Policy",
+    "versions": [
+      {
+        "version": "v1",
+        "effective_date": "2023-07-01",
+        "changed": {}
+      },
+      {
+        "version": "v2",
+        "effective_date": "2024-07-01",
+        "changed": {
+          "1.1": "Full-time employees receive 25 days of paid annual leave per calendar year.",
+          "3.2": "Secondary caregivers receive 4 weeks of paid parental leave."
+        }
+      },
+      {
+        "version": "v3",
+        "effective_date": "2025-07-01",
+        "changed": {
+          "1.2": "Up to 10 unused days may be carried over to the next year and must be used by March 31.",
+          "2.2": "A medical certificate is required for absences longer than 5 consecutive days.",
+          "5.1": "Employees may work remotely from abroad for up to 20 working days per year."
+        }
+      }
+    ]
+  },
+  "data-retention": {
+    "title": "Contoso Data Retention Standard",
+    "versions": [
+      {
+        "version": "v1",
+        "effective_date": "2024-03-01",
+        "changed": {}
+      },
+      {
+        "version": "v2",
+        "effective_date": "2024-11-15",
+        "changed": {
+          "3.1": "Application logs are retained for 30 days.",
+          "4.1": "Verified deletion requests are completed within 30 days."
+        }
+      },
+      {
+        "version": "v3",
+        "effective_date": "2025-06-01",
+        "changed": {
+          "2.1": "Customer account data is retained for 5 years after account closure.",
+          "3.2": "Security audit logs are retained for 2 years."
+        }
+      }
+    ]
+  }
+}
