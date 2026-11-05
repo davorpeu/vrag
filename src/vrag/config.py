@@ -20,6 +20,9 @@ class Settings(BaseSettings):
 
     api_url: str = "http://localhost:8000"
 
+    # Document store for the "db" source (docs-db in docker-compose.yml)
+    docs_db_url: str = "postgresql://vrag:vrag@127.0.0.1:5433/docs"
+
     # Retrieval knobs
     top_k: int = 6
     candidates: int = 30

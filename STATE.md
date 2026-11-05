@@ -78,7 +78,22 @@ User checked Milestone 1 in Streamlit on 2026-11-05: good. Committed (f1d7f90).
   Langfuse gets a categorical "grounding" score per trace (verified arriving).
 - Tests: 60 fast pass (17 new grounding + 2 UI); e2e 15/15 now also require status grounded/not_checked.
 
+## Postgres source - done 2026-11-05
+- docs-db service in docker-compose.yml (postgres:17, port 127.0.0.1:5433, user/pass/db vrag/vrag/docs,
+  shared_buffers 32MB, ~25 MB RAM). Schema in db/init/001_schema.sql (documents + document_versions:
+  version_label, effective_from, filename, content bytea). Data is in a named volume = inside Docker's disk
+  image, which is on E: (E:\Docker Disk image\DockerDesktopWSL). Nothing stored on C:.
+- psycopg installed with --no-cache-dir and TMP on E:rag-tmp (empty folder left; removal was blocked).
+- sources/db.py: DbSource(url, query). Any schema works via a query returning doc_id, version, filename,
+  content, source_date, ref. Versions numbered per doc by (source_date, ref), so back-dated rows land right.
+- sync now renumbers a version whose position changed without re-embedding (report.renumbered).
+- Use 127.0.0.1, not localhost, in DOCS_DB_URL: localhost tried IPv6 first and hung forever (fixed, plus
+  connect_timeout=10).
+- Seed: `.venv/Scripts/python scripts/seed_db.py` (travel-expense-policy v1.0/v1.1/v2.0, DB only), then
+  `.venv/Scripts/vrag sync db`. Golden changes added; eval_diff 8/8, router eval 22/22.
+- Tests: 66 fast pass; e2e 22/22 (5 new travel questions + 2 live DB tests).
+
 Left:
 1. User check of the router in Streamlit (API + UI must be started; run them in your own terminals so
    Claude Code's low-memory cleanup doesn't stop them).
-2. More sources: DB (Postgres), then MinIO.
+2. More sources: MinIO.

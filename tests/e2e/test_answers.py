@@ -45,6 +45,17 @@ CASES = [
      "compare", "refund-policy", ["v1", "v2"], [r"15\s?%", r"defective"], {"only_sections": ["Restocking"]}),
     ("compare-semver", "What changed in semver 2.0.0 compared to 1.0.0?",
      "compare", "semver/semver", ["v1.0.0", "v2.0.0"], [r"build metadata"], {}),
+    # Postgres source (travel-expense-policy exists only in docs-db)
+    ("db-latest-meals", "What is the daily meal allowance on business trips?",
+     "latest", "travel-expense-policy", None, [r"\b60\b"], {}),
+    ("db-latest-hotel", "How much is reimbursed per hotel night?",
+     "latest", "travel-expense-policy", None, [r"\b180\b"], {}),
+    ("db-version-label", "What was the hotel limit in v1.0 of the travel policy?",
+     "version", "travel-expense-policy", ["v1.0"], [r"\b150\b"], {}),
+    ("db-version-date", "How many days did I have to submit expense claims in March 2024?",
+     "version", "travel-expense-policy", ["v1.0"], [r"\b30\b"], {}),
+    ("db-compare", "What changed in version 2.0 of the travel and expense policy?",
+     "compare", "travel-expense-policy", ["v1.1", "v2.0"], [r"\b8\b", r"\b180\b", r"rail"], {}),
     # unclear
     ("unclear-missing-version", "What did version 7 of the refund policy say?",
      "unclear", "refund-policy", [], [r"v1, v2, v3"], {}),

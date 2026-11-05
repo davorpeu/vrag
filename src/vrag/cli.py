@@ -5,6 +5,8 @@ load_dotenv()
 import typer  # noqa: E402
 
 from vrag import store  # noqa: E402
+from vrag.config import get_settings  # noqa: E402
+from vrag.sources.db import DbSource  # noqa: E402
 from vrag.sources.folder import FolderSource  # noqa: E402
 from vrag.sources.git import GitSource  # noqa: E402
 from vrag.sync import sync as run_sync  # noqa: E402
@@ -21,11 +23,13 @@ def init_index(recreate: bool = typer.Option(False, help="Delete and recreate th
 
 @app.command()
 def sync(
-    source: str = typer.Argument("folder", help="folder | git"),
+    source: str = typer.Argument("folder", help="folder | git | db"),
     path: str = typer.Option("data/corpus", help="folder: corpus root"),
     repo: str = typer.Option("", help="git: path to a local clone"),
     file: list[str] = typer.Option([], help="git: file path inside the repo (repeatable)"),
     by: str = typer.Option("tags", help="git: 'tags' or 'commits'"),
+    db_url: str = typer.Option("", help="db: connection URL (default DOCS_DB_URL)"),
+    query: str = typer.Option("", help="db: custom SQL returning doc_id, version, filename, content, source_date, ref"),
 ):
     """Index new/changed document versions from a source."""
     if source == "folder":
@@ -34,11 +38,16 @@ def sync(
         if not repo or not file:
             raise typer.BadParameter("git needs --repo and at least one --file")
         src = GitSource(repo, file, by=by)
+    elif source == "db":
+        url = db_url or get_settings().docs_db_url
+        src = DbSource(url, query) if query else DbSource(url)
     else:
-        raise typer.BadParameter("source must be 'folder' or 'git' (db, minio come next)")
+        raise typer.BadParameter("source must be 'folder', 'git' or 'db' (minio comes next)")
     r = run_sync(src)
     typer.echo(f"indexed {len(r.indexed)}: {', '.join(r.indexed) or '-'}")
     typer.echo(f"skipped {len(r.skipped)} unchanged")
+    if r.renumbered:
+        typer.echo(f"renumbered {len(r.renumbered)} (version order changed): {', '.join(r.renumbered)}")
     if r.empty:
         typer.echo(f"no text extracted from: {', '.join(r.empty)}")
 

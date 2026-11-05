@@ -80,5 +80,34 @@
         }
       }
     ]
+  },
+  "travel-expense-policy": {
+    "title": "Contoso Travel and Expense Policy",
+    "source": "db",
+    "versions": [
+      {
+        "version": "v1.0",
+        "effective_date": "2024-02-01",
+        "changed": {}
+      },
+      {
+        "version": "v1.1",
+        "effective_date": "2024-08-01",
+        "changed": {
+          "2.1": "The daily meal allowance is 60 EUR.",
+          "4.1": "Expense claims must be submitted within 60 days of the trip."
+        }
+      },
+      {
+        "version": "v2.0",
+        "effective_date": "2025-03-01",
+        "changed": {
+          "1.2": "Economy class is required for flights under 8 hours.",
+          "2.2": "Alcohol is reimbursable only for client dinners, up to 30 EUR per person.",
+          "3.1": "Hotel stays are reimbursed up to 180 EUR per night.",
+          "5.1": "Rail travel is required for trips under 4 hours where a direct train exists."
+        }
+      }
+    ]
   }
 }

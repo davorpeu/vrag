@@ -13,6 +13,7 @@ class SyncReport:
     indexed: list[str] = field(default_factory=list)
     skipped: list[str] = field(default_factory=list)
     empty: list[str] = field(default_factory=list)
+    renumbered: list[str] = field(default_factory=list)
 
 
 def build_chunks(v: DocVersion) -> list[Chunk]:
@@ -48,8 +49,14 @@ def sync(source: VersionSource) -> SyncReport:
     touched: set[str] = set()
     for v in source.iter_versions():
         label = f"{v.doc_id}@{v.version}"
-        if store.indexed_hash(v.doc_id, v.version) == hashlib.sha256(v.content).hexdigest():
-            report.skipped.append(label)
+        meta = store.indexed_meta(v.doc_id, v.version)
+        if meta and meta[0] == hashlib.sha256(v.content).hexdigest():
+            if meta[1] != v.version_num:  # same text, new position in the version order
+                store.set_version_num(v.doc_id, v.version, v.version_num)
+                touched.add(v.doc_id)
+                report.renumbered.append(label)
+            else:
+                report.skipped.append(label)
             continue
         chunks = build_chunks(v)
         if not chunks:

@@ -58,17 +58,33 @@ def ensure_index(recreate: bool = False) -> None:
         es().indices.create(index=s.es_index, mappings=mapping(s.embed_dims))
 
 
-def indexed_hash(doc_id: str, version: str) -> str | None:
-    """Content hash currently indexed for this doc version, if any."""
+def indexed_meta(doc_id: str, version: str) -> tuple[str, int] | None:
+    """(content_hash, version_num) currently indexed for this doc version, if any."""
     s = get_settings()
     res = es().search(
         index=s.es_index,
         size=1,
         query={"bool": {"filter": [{"term": {"doc_id": doc_id}}, {"term": {"version": version}}]}},
-        source=["content_hash"],
+        source=["content_hash", "version_num"],
     )
     hits = res["hits"]["hits"]
-    return hits[0]["_source"]["content_hash"] if hits else None
+    return (hits[0]["_source"]["content_hash"], hits[0]["_source"]["version_num"]) if hits else None
+
+
+def indexed_hash(doc_id: str, version: str) -> str | None:
+    meta = indexed_meta(doc_id, version)
+    return meta[0] if meta else None
+
+
+def set_version_num(doc_id: str, version: str, version_num: int) -> None:
+    """Renumber an indexed version without re-embedding (e.g. a back-dated version was inserted)."""
+    s = get_settings()
+    es().update_by_query(
+        index=s.es_index,
+        query={"bool": {"filter": [{"term": {"doc_id": doc_id}}, {"term": {"version": version}}]}},
+        script={"source": "ctx._source.version_num = params.n", "params": {"n": version_num}},
+        refresh=True,
+    )
 
 
 def replace_version(chunks: list[Chunk]) -> None:

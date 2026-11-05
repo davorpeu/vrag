@@ -15,5 +15,10 @@
   {"q": "How did the restocking fee rules change in v2 of the refund policy?", "intent": "compare", "doc": "refund-policy", "versions": ["v1", "v2"]},
   {"q": "What did version 7 of the refund policy say?", "intent": "unclear"},
   {"q": "What about the other one?", "intent": "unclear"},
-  {"q": "Is the data retention standard v3 different from v2 regarding deletion requests?", "intent": "compare", "doc": "data-retention", "versions": ["v2", "v3"]}
+  {"q": "Is the data retention standard v3 different from v2 regarding deletion requests?", "intent": "compare", "doc": "data-retention", "versions": ["v2", "v3"]},
+  {"q": "What is the daily meal allowance on business trips?", "intent": "latest"},
+  {"q": "What was the hotel limit in v1.0 of the travel policy?", "intent": "version", "doc": "travel-expense-policy", "versions": ["v1.0"]},
+  {"q": "How many days did I have to submit expense claims in March 2024?", "intent": "version", "doc": "travel-expense-policy", "versions": ["v1.0"]},
+  {"q": "What changed in version 2.0 of the travel and expense policy?", "intent": "compare", "doc": "travel-expense-policy", "versions": ["v1.1", "v2.0"]},
+  {"q": "What changed between v1.0 and v2.0 of the travel policy?", "intent": "compare", "doc": "travel-expense-policy", "versions": ["v1.0", "v2.0"]}
 ]
