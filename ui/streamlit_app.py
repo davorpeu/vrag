@@ -49,6 +49,22 @@ if st.button("Ask", type="primary") and question:
         st.warning("The documents don't seem to contain this answer.")
     st.markdown(res["answer"])
 
+    g = res.get("grounding") or {}
+    status = g.get("status")
+    if status == "grounded":
+        extra = f" ({g['repaired_quotes']} quote(s) corrected to the exact source text)" if g.get("repaired_quotes") else ""
+        st.success("Checked against the sources: every quote and number was found." + extra)
+        for issue in g.get("issues", []):  # e.g. a comparison summary replaced by the exact list
+            st.caption(f"Note: {issue}")
+    elif status in ("partial", "ungrounded"):
+        head = (
+            "Parts of this answer could not be verified against the sources."
+            if status == "partial"
+            else "This answer could not be verified against the sources. Treat it with caution."
+        )
+        retried = " (after one retry)" if g.get("retried") else ""
+        st.error(head + retried + "\n\n" + "\n".join(f"- {i}" for i in g.get("issues", [])))
+
     st.subheader("Sources")
     if not res["citations"]:
         st.info("No citations returned.")

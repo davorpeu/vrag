@@ -81,9 +81,18 @@ class RouteInfo(BaseModel):
     note: str = Field("", description="What the router assumed, or why it is unclear")
 
 
+class GroundingInfo(BaseModel):
+    status: str = Field(description="grounded | partial | ungrounded | not_checked")
+    issues: list[str] = Field(default_factory=list, description="What failed or was corrected")
+    repaired_quotes: int = 0
+    dropped_quotes: int = 0
+    retried: bool = False
+
+
 class AskResponse(BaseModel):
     question: str
     route: RouteInfo | None = None
+    grounding: GroundingInfo | None = None
     answer: str
     insufficient_context: bool
     citations: list[ResolvedCitation]

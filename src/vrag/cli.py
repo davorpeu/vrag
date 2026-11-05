@@ -58,6 +58,10 @@ def ask(question: str):
     typer.echo(res.answer)
     for c in res.citations:
         typer.echo(f"  [{c.source}] {c.doc_title} {c.version} (eff. {c.effective_date}) section {c.section}: \"{c.quote}\"")
+    if res.grounding:
+        g = res.grounding
+        retried = ", retried once" if g.retried else ""
+        typer.echo(f"[grounding: {g.status}{retried}] " + "; ".join(g.issues))
     if res.unknown_citations:
         typer.echo(f"  ! cited unknown sources: {res.unknown_citations}")
 

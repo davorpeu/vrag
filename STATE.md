@@ -65,8 +65,20 @@ User checked Milestone 1 in Streamlit on 2026-11-05: good. Committed (f1d7f90).
   model's insufficient_context flag was unreliable (now forced true when there is no valid citation).
 - Router eval now has 17 cases (17/17).
 
+## Groundedness check - done 2026-11-05
+- grounding.py (no extra LLM call): every quote must be in the cited chunk (near-misses repaired to the
+  exact source text, invented quotes dropped); every number in the answer must be in the cited sources
+  (text + version/date/section) or the question. Number words handled (two, twenty-one).
+- latest/version: on failure, one retry with the problems as feedback; best result kept.
+  Model cited nothing -> the text is not shown, replaced by "I couldn't find an answer..." (not_checked).
+- compare: citations come from the diff; a summary with a number not in the changed clauses is replaced
+  by the exact before/after list.
+- AskResponse.grounding {status grounded|partial|ungrounded|not_checked, issues, repaired, dropped, retried};
+  UI shows a green check or a red warning with the issues; CLI prints [grounding: ...];
+  Langfuse gets a categorical "grounding" score per trace (verified arriving).
+- Tests: 60 fast pass (17 new grounding + 2 UI); e2e 15/15 now also require status grounded/not_checked.
+
 Left:
 1. User check of the router in Streamlit (API + UI must be started; run them in your own terminals so
    Claude Code's low-memory cleanup doesn't stop them).
-2. Groundedness check (quotes must really appear in the cited chunk) + answer-level eval set.
-3. More sources: DB (Postgres), then MinIO.
+2. More sources: DB (Postgres), then MinIO.

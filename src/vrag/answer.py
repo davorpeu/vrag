@@ -8,16 +8,17 @@
 """
 
 import re
+from dataclasses import dataclass
 
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_ollama import ChatOllama
 from langfuse import get_client, observe, propagate_attributes
 from langfuse.langchain import CallbackHandler
 
-from vrag import router, store
+from vrag import grounding, router, store
 from vrag.config import get_settings
 from vrag.diff import ClauseChange, clause_changes, cut, diff_versions, word_changes
-from vrag.models import AskResponse, CompareSummary, LLMAnswer, ResolvedCitation, RouteInfo
+from vrag.models import AskResponse, CompareSummary, GroundingInfo, LLMAnswer, ResolvedCitation, RouteInfo
 
 PROMPT = ChatPromptTemplate.from_messages(
     [
@@ -167,23 +168,99 @@ def _cite(label: str, chunk: dict, quote: str) -> ResolvedCitation:
     )
 
 
-def _response(question: str, route: router.Route, result: LLMAnswer, labelled: dict[str, dict]) -> AskResponse:
-    resolved, unknown = [], []
+@dataclass
+class _Checked:
+    result: LLMAnswer
+    citations: list[ResolvedCitation]
+    unknown: list[str]
+    grounding: grounding.Grounding
+
+
+def _check(question: str, result: LLMAnswer, labelled: dict[str, dict]) -> _Checked:
+    """Resolve the model's citations and run the groundedness checks on its answer."""
+    cites, unknown, issues = [], [], []
+    repaired = dropped = 0
     for c in result.citations:
         label = c.source.strip("[] ")
         h = labelled.get(label)
         if h is None:
             unknown.append(c.source)
+            issues.append(f"cited {c.source}, which is not one of the sources")
             continue
-        resolved.append(_cite(label, h, c.quote))
+        qc = grounding.check_quote(c.quote, h["text"])
+        if qc.status == "not_found":
+            dropped += 1
+            issues.append(f"quote not found in {label}: \"{c.quote}\"")
+            continue
+        if qc.status == "repaired":
+            repaired += 1
+        cites.append(_cite(label, h, qc.quote))
+
+    if not result.citations:
+        # The model cited nothing: an honest refusal, or an unsupported claim. Either way the text
+        # is not backed by the sources, so it is not shown.
+        refusal = LLMAnswer(citations=[], answer=NOT_FOUND, insufficient_context=True)
+        return _Checked(refusal, [], [], grounding.Grounding("not_checked"))
+
+    by_id = {h["chunk_id"]: h for h in labelled.values()}
+    cited_ids = dict.fromkeys(c.chunk_id for c in cites)
+    allowed = "\n".join(grounding.source_text(by_id[i]) for i in cited_ids) + "\n" + question
+    bad_numbers = grounding.unsupported_numbers(result.answer, allowed)
+    if bad_numbers:
+        issues.append(f"numbers not in the cited sources: {', '.join(bad_numbers)}")
+    if not cites:
+        issues.append("no citation could be verified")
+    g = grounding.summarize(issues, len(cites), dropped + len(unknown), repaired, bool(bad_numbers))
+    return _Checked(result, cites, unknown, g)
+
+
+NOT_FOUND = "I couldn't find an answer to this in the documents."
+
+STATUS_RANK = {"grounded": 0, "not_checked": 0, "partial": 1, "ungrounded": 2}
+
+
+def _answer_checked(prompt_inputs: dict, labelled: dict[str, dict], question: str, run_name: str) -> tuple[_Checked, bool]:
+    """Ask the LLM, check the answer, and retry once with the problems as feedback if it fails."""
+    chain = _llm(PROMPT, LLMAnswer)
+    first = _check(question, chain.invoke(prompt_inputs, config={"callbacks": [CallbackHandler()], "run_name": run_name}), labelled)
+    if first.grounding.ok:
+        return first, False
+    feedback = (
+        f"{prompt_inputs['question']}\n\n"
+        "Your previous answer failed a check against the sources: "
+        + "; ".join(first.grounding.issues)
+        + ". Answer again. Use only facts stated in the sources, and copy each quote exactly from its source."
+    )
+    second = _check(
+        question,
+        chain.invoke({**prompt_inputs, "question": feedback}, config={"callbacks": [CallbackHandler()], "run_name": f"{run_name}-retry"}),
+        labelled,
+    )
+    best = second if STATUS_RANK[second.grounding.status] <= STATUS_RANK[first.grounding.status] else first
+    return best, True
+
+
+def _grounding_info(g: grounding.Grounding, retried: bool) -> GroundingInfo:
+    info = GroundingInfo(
+        status=g.status, issues=g.issues, repaired_quotes=g.repaired_quotes, dropped_quotes=g.dropped_quotes, retried=retried
+    )
+    try:  # a Langfuse score per trace makes ungrounded answers easy to filter; never break the answer
+        get_client().score_current_trace(name="grounding", value=g.status, data_type="CATEGORICAL", comment="; ".join(g.issues) or None)
+    except Exception:  # noqa: BLE001
+        pass
+    return info
+
+
+def _response(question: str, route: router.Route, checked: _Checked, retried: bool) -> AskResponse:
     return AskResponse(
         question=question,
         route=_route_info(route),
-        answer=result.answer,
-        # An answer without a single valid citation is not grounded, whatever the model's flag says.
-        insufficient_context=result.insufficient_context or not resolved,
-        citations=resolved,
-        unknown_citations=unknown,
+        grounding=_grounding_info(checked.grounding, retried),
+        answer=checked.result.answer,
+        # An answer without a single verified citation is not grounded, whatever the model's flag says.
+        insufficient_context=checked.result.insufficient_context or not checked.citations,
+        citations=checked.citations,
+        unknown_citations=checked.unknown,
         trace_id=get_client().get_current_trace_id(),
     )
 
@@ -196,6 +273,7 @@ def _plain(question: str, route: router.Route, text: str, insufficient: bool = T
     return AskResponse(
         question=question,
         route=_route_info(route),
+        grounding=GroundingInfo(status="not_checked"),
         answer=text,
         insufficient_context=insufficient,
         citations=[],
@@ -241,11 +319,9 @@ def route_question(question: str) -> router.Route:
 def answer_latest(question: str, route: router.Route) -> AskResponse:
     hits = store.hybrid_search(question)
     context, labelled = format_context(hits)
-    result = _llm(PROMPT, LLMAnswer).invoke(
-        {"question": question, "context": context, "scope": "Sources are from the latest version of each document."},
-        config={"callbacks": [CallbackHandler()], "run_name": "llm-latest"},
-    )
-    return _response(question, route, result, labelled)
+    inputs = {"question": question, "context": context, "scope": "Sources are from the latest version of each document."}
+    checked, retried = _answer_checked(inputs, labelled, question, "llm-latest")
+    return _response(question, route, checked, retried)
 
 
 @observe(name="answer-version")
@@ -273,11 +349,9 @@ def answer_version(question: str, route: router.Route) -> AskResponse:
     llm_question = re.sub(r"\b(?:the\s+)?(?:previous|prior|old|older|earlier)\s+", "the ", llm_question, flags=re.I)
     if llm_question != question or version not in question:
         llm_question = f"{llm_question} (Answer from {title} {version}.)"
-    result = _llm(PROMPT, LLMAnswer).invoke(
-        {"question": llm_question, "context": context, "scope": scope},
-        config={"callbacks": [CallbackHandler()], "run_name": "llm-version"},
-    )
-    return _response(question, route, result, labelled)
+    inputs = {"question": llm_question, "context": context, "scope": scope}
+    checked, retried = _answer_checked(inputs, labelled, question, "llm-version")
+    return _response(question, route, checked, retried)
 
 
 @observe(name="answer-compare")
@@ -345,9 +419,28 @@ def answer_compare(question: str, route: router.Route) -> AskResponse:
         skipped = [c for c in (changes[n - 1] for n in picked) if not mentions_change(text, c)]
         if skipped:
             text += "\n\nAlso changed:\n" + "\n".join(_change_line(c, old_v, new_v) for c in skipped)
+
+    # Groundedness: citations come from the diff, so they are verbatim by construction (checked anyway).
+    # The model's summary may still invent a number; then the exact before/after list replaces it.
+    issues = []
+    for c in citations:
+        if grounding.check_quote(c.quote, next(ch["text"] for ch in old + new if ch["chunk_id"] == c.chunk_id)).status != "exact":
+            issues.append(f"diff quote not found verbatim in {c.chunk_id}")
+    picked_changes = [changes[n - 1] for n in picked]
+    allowed = "\n".join(
+        grounding.source_text(ch) for c in picked_changes for ch in (c.old_chunk, c.new_chunk) if ch
+    ) + f"\n{question}"
+    bad = grounding.unsupported_numbers(text, allowed, extra_allowed={str(n) for n in every})
+    if bad:
+        issues.append(
+            f"summary mentioned {', '.join(bad)}, not in the changed clauses; replaced by the exact list of changes"
+        )
+        text = f"Changes from {old_v} to {new_v}:\n" + "\n".join(_change_line(c, old_v, new_v) for c in picked_changes)
+    status = "ungrounded" if any(i.startswith("diff quote") for i in issues) else "grounded"
     return AskResponse(
         question=question,
         route=_route_info(route),
+        grounding=_grounding_info(grounding.Grounding(status, issues), retried=False),
         answer=text,
         insufficient_context=False,
         citations=citations,

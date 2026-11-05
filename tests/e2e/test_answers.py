@@ -83,6 +83,10 @@ def test_answer(cid, q, intent, doc, versions, facts, extra, answers, catalog, c
     if intent in ("version", "compare", "unclear") and doc:
         assert route["doc_id"] == doc, shown
 
+    # groundedness check by the app itself
+    expected = "not_checked" if intent == "unclear" or extra.get("insufficient") else "grounded"
+    assert res["grounding"]["status"] == expected, f"grounding={res['grounding']}{shown}"
+
     # facts in the answer
     for pattern in facts:
         assert re.search(pattern, res["answer"], re.I), f"answer lacks /{pattern}/{shown}"

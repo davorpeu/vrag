@@ -30,6 +30,7 @@ COMPARE = {
     "citations": [_cite("1-v1", "v1", "2024-01-15", 30), _cite("1-v3", "v3", "2025-04-01", 21)],
     "unknown_citations": [],
     "trace_id": "abc123",
+    "grounding": {"status": "grounded", "issues": [], "repaired_quotes": 0, "dropped_quotes": 0, "retried": False},
 }
 
 UNCLEAR = {
@@ -87,3 +88,26 @@ def test_api_error_is_shown(monkeypatch):
     at.text_input[0].input("anything")
     at.button[0].click().run()
     assert any("API error" in e.value for e in at.error)
+
+
+def test_grounded_badge(monkeypatch):
+    at = run_ui(monkeypatch, COMPARE)
+    assert any("every quote and number was found" in m.value for m in at.success)
+    assert not at.error
+
+
+def test_ungrounded_warning_lists_issues(monkeypatch):
+    bad = {
+        **COMPARE,
+        "grounding": {
+            "status": "ungrounded",
+            "issues": ["numbers not in the cited sources: 30"],
+            "repaired_quotes": 0,
+            "dropped_quotes": 0,
+            "retried": True,
+        },
+    }
+    at = run_ui(monkeypatch, bad)
+    err = at.error[0].value
+    assert "could not be verified" in err and "after one retry" in err and "30" in err
+    assert not at.success
