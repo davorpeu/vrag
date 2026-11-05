@@ -6,6 +6,7 @@ import typer  # noqa: E402
 
 from vrag import store  # noqa: E402
 from vrag.sources.folder import FolderSource  # noqa: E402
+from vrag.sources.git import GitSource  # noqa: E402
 from vrag.sync import sync as run_sync  # noqa: E402
 
 app = typer.Typer(no_args_is_help=True)
@@ -19,11 +20,23 @@ def init_index(recreate: bool = typer.Option(False, help="Delete and recreate th
 
 
 @app.command()
-def sync(source: str = typer.Argument("folder"), path: str = typer.Option("data/corpus")):
+def sync(
+    source: str = typer.Argument("folder", help="folder | git"),
+    path: str = typer.Option("data/corpus", help="folder: corpus root"),
+    repo: str = typer.Option("", help="git: path to a local clone"),
+    file: list[str] = typer.Option([], help="git: file path inside the repo (repeatable)"),
+    by: str = typer.Option("tags", help="git: 'tags' or 'commits'"),
+):
     """Index new/changed document versions from a source."""
-    if source != "folder":
-        raise typer.BadParameter("only 'folder' exists so far (git, db, minio come next)")
-    r = run_sync(FolderSource(path))
+    if source == "folder":
+        src = FolderSource(path)
+    elif source == "git":
+        if not repo or not file:
+            raise typer.BadParameter("git needs --repo and at least one --file")
+        src = GitSource(repo, file, by=by)
+    else:
+        raise typer.BadParameter("source must be 'folder' or 'git' (db, minio come next)")
+    r = run_sync(src)
     typer.echo(f"indexed {len(r.indexed)}: {', '.join(r.indexed) or '-'}")
     typer.echo(f"skipped {len(r.skipped)} unchanged")
     if r.empty:

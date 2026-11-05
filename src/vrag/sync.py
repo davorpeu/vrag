@@ -2,7 +2,7 @@ import hashlib
 from dataclasses import dataclass, field
 
 from vrag import store
-from vrag.chunking import split_sections
+from vrag.chunking import split_markdown, split_sections
 from vrag.extract import extract_text, find_effective_date, find_title
 from vrag.models import Chunk, DocVersion
 from vrag.sources.base import VersionSource
@@ -20,6 +20,8 @@ def build_chunks(v: DocVersion) -> list[Chunk]:
     content_hash = hashlib.sha256(v.content).hexdigest()
     title = find_title(text) or v.doc_id
     effective = find_effective_date(text) or v.source_date
+    is_md = v.filename.lower().endswith((".md", ".markdown"))
+    sections = split_markdown(text) if is_md else split_sections(text)
     return [
         Chunk(
             chunk_id=f"{v.doc_id}:{v.version}:{i}",
@@ -35,7 +37,7 @@ def build_chunks(v: DocVersion) -> list[Chunk]:
             section_title=sec.title,
             text=sec.text,
         )
-        for i, sec in enumerate(split_sections(text))
+        for i, sec in enumerate(sections)
     ]
 
 

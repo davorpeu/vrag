@@ -16,6 +16,8 @@ def extract_text(filename: str, content: bytes) -> str:
     if name.endswith(".docx"):
         d = docx.Document(io.BytesIO(content))
         return "\n".join(p.text for p in d.paragraphs)
+    if name.endswith((".md", ".markdown", ".txt")):
+        return content.decode("utf-8-sig", errors="replace")
     raise ValueError(f"Unsupported file type: {filename}")
 
 
@@ -27,5 +29,5 @@ def find_effective_date(text: str) -> date | None:
 def find_title(text: str) -> str:
     for line in text.splitlines():
         if line.strip():
-            return line.strip()
+            return line.strip().lstrip("#").strip()
     return ""
