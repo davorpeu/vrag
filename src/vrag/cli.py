@@ -52,6 +52,9 @@ def ask(question: str):
         res = answer.ask(question)
     finally:
         answer.flush()
+    if res.route:
+        r = res.route
+        typer.echo(f"[route: {r.intent} {r.doc_id or ''} {' -> '.join(r.versions)}] {r.note}".rstrip())
     typer.echo(res.answer)
     for c in res.citations:
         typer.echo(f"  [{c.source}] {c.doc_title} {c.version} (eff. {c.effective_date}) section {c.section}: \"{c.quote}\"")

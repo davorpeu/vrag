@@ -1,0 +1,18 @@
+[
+  {"q": "How many days do customers have to request a refund?", "intent": "latest"},
+  {"q": "How long are security audit logs kept?", "intent": "latest"},
+  {"q": "When must I increment the major version in semantic versioning?", "intent": "latest"},
+  {"q": "What was the refund window in version 2 of the refund policy?", "intent": "version", "doc": "refund-policy", "versions": ["v2"]},
+  {"q": "What did the leave policy v1 say about parental leave for secondary caregivers?", "intent": "version", "doc": "leave-policy", "versions": ["v1"]},
+  {"q": "What did semver 1.0.0 say about pre-release versions?", "intent": "version", "doc": "semver/semver", "versions": ["v1.0.0"]},
+  {"q": "What was the refund window in March 2024?", "intent": "version", "doc": "refund-policy", "versions": ["v1"]},
+  {"q": "How long were application logs kept at the end of 2024?", "intent": "version", "doc": "data-retention", "versions": ["v2"]},
+  {"q": "What did the previous version of the data retention standard say about account data?", "intent": "version", "doc": "data-retention", "versions": ["v2"]},
+  {"q": "What changed between v1 and v3 of the refund policy?", "intent": "compare", "doc": "refund-policy", "versions": ["v1", "v3"]},
+  {"q": "What is new in the latest leave policy?", "intent": "compare", "doc": "leave-policy", "versions": ["v2", "v3"]},
+  {"q": "What changed in semver 2.0.0 compared to 1.0.0?", "intent": "compare", "doc": "semver/semver", "versions": ["v1.0.0", "v2.0.0"]},
+  {"q": "How did the restocking fee rules change in v2 of the refund policy?", "intent": "compare", "doc": "refund-policy", "versions": ["v1", "v2"]},
+  {"q": "What did version 7 of the refund policy say?", "intent": "unclear"},
+  {"q": "What about the other one?", "intent": "unclear"},
+  {"q": "Is the data retention standard v3 different from v2 regarding deletion requests?", "intent": "compare", "doc": "data-retention", "versions": ["v2", "v3"]}
+]

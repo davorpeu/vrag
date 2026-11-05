@@ -39,7 +39,23 @@ User checked Milestone 1 in Streamlit on 2026-11-05: good. Committed (f1d7f90).
 - 8 tests pass. Semver Q&A cites v2.0.0 rules correctly; policy Q&A still correct.
 - Memory: the PC is tight (1.8 GB free with the stack + Ollama). Kibana is left stopped (not needed).
 
+## Milestone 3 (query router) - done 2026-11-05
+- router.py: LLM classify (intent latest|version|compare|unclear, document, versions, as_of) with the
+  catalog of indexed docs/versions in the prompt; then resolve() in plain code checks it against the catalog.
+  Version mentions must appear in the question text (the LLM copied "2.0.0" from the semver title);
+  explicit unknown versions ("version 7") -> unclear + list of real versions; dates pick the version in
+  effect; "previous/old" -> second-newest; one version in a compare -> compared with the one before it.
+- diff.py: section pairing by text similarity, then clause-level changes; version-label/date-only lines ignored.
+- answer.py pipelines: latest | version (search filtered to doc+version; "previous/old" in the question is
+  rewritten to the version label for the LLM) | compare (citations built from the diff, LLM only summarises;
+  general questions include all changes; any change the summary skips is appended as "Also changed:";
+  a summary that stops at ":" gets the before/after list) | unclear (no LLM answer).
+- UI shows a route banner (type, doc, versions, note). CLI prints [route: ...].
+- Evals: scripts/eval_router.py (16/16 on data/golden/router_cases.json, ~1.5 min, uses the LLM) and
+  scripts/eval_diff.py (6/6 version pairs vs data/golden/changes.json, no LLM). 41 unit tests pass.
+
 Left:
-1. Next milestone: query router (latest / specific version / compare / unclear). semver now gives
-   real version questions ("what did 1.0.0 say about pre-releases?", "what changed from 1.0.0 to 2.0.0?").
-2. Later sources: DB (Postgres), then MinIO.
+1. User check of the router in Streamlit (API + UI must be started; run them in your own terminals so
+   Claude Code's low-memory cleanup doesn't stop them).
+2. Groundedness check (quotes must really appear in the cited chunk) + answer-level eval set.
+3. More sources: DB (Postgres), then MinIO.

@@ -151,3 +151,62 @@ def hybrid_search(question: str, filters: list[dict] | None = None, top_k: int |
     by_id = {h["_id"]: h["_source"] for h in bm25 + knn}
     fused = _rrf([[h["_id"] for h in bm25], [h["_id"] for h in knn]], s.rrf_k)
     return [by_id[i] for i in fused[:top_k]]
+
+
+def catalog() -> list[dict]:
+    """Every indexed doc with its versions, oldest first:
+    [{"doc_id", "doc_title", "versions": [{"version", "version_num", "effective_date", "is_latest"}]}]
+    """
+    s = get_settings()
+    res = es().search(
+        index=s.es_index,
+        size=0,
+        aggs={
+            "docs": {
+                "terms": {"field": "doc_id", "size": 1000},
+                "aggs": {
+                    "versions": {
+                        "terms": {"field": "version", "size": 1000},
+                        "aggs": {
+                            "info": {
+                                "top_hits": {
+                                    "size": 1,
+                                    "_source": ["doc_title", "version_num", "effective_date", "is_latest"],
+                                }
+                            }
+                        },
+                    }
+                },
+            }
+        },
+    )
+    out = []
+    for d in res["aggregations"]["docs"]["buckets"]:
+        versions = []
+        for v in d["versions"]["buckets"]:
+            src = v["info"]["hits"]["hits"][0]["_source"]
+            versions.append(
+                {
+                    "version": v["key"],
+                    "version_num": src["version_num"],
+                    "effective_date": src["effective_date"],
+                    "is_latest": src["is_latest"],
+                    "doc_title": src["doc_title"],
+                }
+            )
+        versions.sort(key=lambda x: x["version_num"])
+        out.append({"doc_id": d["key"], "doc_title": versions[-1]["doc_title"], "versions": versions})
+    return sorted(out, key=lambda d: d["doc_id"])
+
+
+def version_chunks(doc_id: str, version: str) -> list[dict]:
+    """All chunks of one doc version in document order (chunk_id ends with the chunk index)."""
+    s = get_settings()
+    res = es().search(
+        index=s.es_index,
+        size=1000,
+        query={"bool": {"filter": [{"term": {"doc_id": doc_id}}, {"term": {"version": version}}]}},
+        source={"excludes": ["embedding"]},
+    )
+    hits = [h["_source"] for h in res["hits"]["hits"]]
+    return sorted(hits, key=lambda h: int(h["chunk_id"].rsplit(":", 1)[1]))

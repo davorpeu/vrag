@@ -54,6 +54,15 @@ class LLMAnswer(BaseModel):
     )
 
 
+class CompareSummary(BaseModel):
+    """What the LLM returns for a comparison. Citations are built from the diff, not by the LLM."""
+
+    relevant_changes: list[int] = Field(
+        description="Numbers of the changes that answer the question (all of them for 'what changed?')"
+    )
+    answer: str = Field(description="Answer describing those changes: what it was before and what it is now")
+
+
 class ResolvedCitation(BaseModel):
     source: str
     doc_id: str
@@ -65,8 +74,16 @@ class ResolvedCitation(BaseModel):
     chunk_id: str
 
 
+class RouteInfo(BaseModel):
+    intent: str = Field(description="latest | version | compare | unclear")
+    doc_id: str | None = None
+    versions: list[str] = Field(default_factory=list, description="Versions used, oldest first")
+    note: str = Field("", description="What the router assumed, or why it is unclear")
+
+
 class AskResponse(BaseModel):
     question: str
+    route: RouteInfo | None = None
     answer: str
     insufficient_context: bool
     citations: list[ResolvedCitation]

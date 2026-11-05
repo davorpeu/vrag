@@ -8,7 +8,17 @@ LANGFUSE_HOST = os.getenv("LANGFUSE_HOST", "http://localhost:3000")
 
 st.set_page_config(page_title="versioned-rag", layout="wide")
 st.title("versioned-rag")
-st.caption("Answers from the latest version of each document, with citations.")
+st.caption(
+    "Ask about the latest rules, a specific version (\"what did v1 say...\", \"in March 2024...\"), "
+    "or what changed between versions. Every answer cites the exact version it used."
+)
+
+ROUTE_LABELS = {
+    "latest": "Latest version",
+    "version": "Specific version",
+    "compare": "Comparison",
+    "unclear": "Needs clarification",
+}
 
 question = st.text_input("Question", placeholder="How many days do customers have to request a refund?")
 
@@ -22,6 +32,19 @@ if st.button("Ask", type="primary") and question:
             st.error(f"API error: {e}")
             st.stop()
 
+    route = res.get("route") or {}
+    if route:
+        bits = [ROUTE_LABELS.get(route["intent"], route["intent"])]
+        if route.get("doc_id"):
+            bits.append(route["doc_id"])
+        if route.get("versions"):
+            bits.append(" -> ".join(route["versions"]))
+        note = f"  \n{route['note']}" if route.get("note") else ""  # two spaces + newline = markdown line break
+        st.info("  |  ".join(bits) + note)
+
+    if route.get("intent") == "unclear":
+        st.warning(res["answer"])
+        st.stop()
     if res["insufficient_context"]:
         st.warning("The documents don't seem to contain this answer.")
     st.markdown(res["answer"])
