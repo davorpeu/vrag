@@ -38,3 +38,6 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+# e2e tests need Elasticsearch + Ollama and take minutes: run them with `pytest -m e2e`
+addopts = "-m 'not e2e'"
+markers = ["e2e: end-to-end through the real API, Elasticsearch and the local LLM"]

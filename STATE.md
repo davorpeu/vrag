@@ -54,6 +54,17 @@ User checked Milestone 1 in Streamlit on 2026-11-05: good. Committed (f1d7f90).
 - Evals: scripts/eval_router.py (16/16 on data/golden/router_cases.json, ~1.5 min, uses the LLM) and
   scripts/eval_diff.py (6/6 version pairs vs data/golden/changes.json, no LLM). 41 unit tests pass.
 
+## Automated tests - added 2026-11-05
+- Fast (default `pytest`, ~10 s, no services): 41 unit tests + tests/test_ui.py (Streamlit AppTest with a
+  fake API: route banner, answer, citations, unclear, API error).
+- End-to-end (`.venv/Scripts/python -m pytest -m e2e`, ~4 min, needs ES + Ollama + synced corpus and semver):
+  tests/e2e/test_answers.py, 15 questions through the real API. Checks route, versions, facts in the answer,
+  citations only from the routed versions, both sides cited in comparisons, and every quote found verbatim
+  in the cited chunk. 15/15 pass.
+- Fixes found by the e2e run: off-topic questions were routed "unclear" (router prompt examples), and the
+  model's insufficient_context flag was unreliable (now forced true when there is no valid citation).
+- Router eval now has 17 cases (17/17).
+
 Left:
 1. User check of the router in Streamlit (API + UI must be started; run them in your own terminals so
    Claude Code's low-memory cleanup doesn't stop them).

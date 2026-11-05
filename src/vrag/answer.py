@@ -180,7 +180,8 @@ def _response(question: str, route: router.Route, result: LLMAnswer, labelled: d
         question=question,
         route=_route_info(route),
         answer=result.answer,
-        insufficient_context=result.insufficient_context,
+        # An answer without a single valid citation is not grounded, whatever the model's flag says.
+        insufficient_context=result.insufficient_context or not resolved,
         citations=resolved,
         unknown_citations=unknown,
         trace_id=get_client().get_current_trace_id(),

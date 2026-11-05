@@ -2,6 +2,7 @@
   {"q": "How many days do customers have to request a refund?", "intent": "latest"},
   {"q": "How long are security audit logs kept?", "intent": "latest"},
   {"q": "When must I increment the major version in semantic versioning?", "intent": "latest"},
+  {"q": "What is the company's dress code?", "intent": "latest"},
   {"q": "What was the refund window in version 2 of the refund policy?", "intent": "version", "doc": "refund-policy", "versions": ["v2"]},
   {"q": "What did the leave policy v1 say about parental leave for secondary caregivers?", "intent": "version", "doc": "leave-policy", "versions": ["v1"]},
   {"q": "What did semver 1.0.0 say about pre-release versions?", "intent": "version", "doc": "semver/semver", "versions": ["v1.0.0"]},

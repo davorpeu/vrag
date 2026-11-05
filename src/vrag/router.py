@@ -54,7 +54,8 @@ ROUTER_PROMPT = ChatPromptTemplate.from_messages(
             "- intent=latest when the question asks about current rules and names no version or date.\n"
             "- intent=version when it asks what a specific version, an older/previous version, or a date said.\n"
             "- intent=compare when it asks what changed, what is new, or how versions differ.\n"
-            "- intent=unclear only when it is impossible to tell what is being asked.\n"
+            "- intent=unclear only when it is impossible to tell what is being asked (e.g. 'the other one'). "
+            "A clear question about a topic the documents may not cover is intent=latest, not unclear.\n"
             "- versions: copy labels exactly as in the catalog. 'version 2' of a policy is v2; "
             "'2.0' or '2.0.0' of semver is v2.0.0.\n"
             "- 'previous'/'old' version without a label: leave versions empty.\n\n"
@@ -63,7 +64,9 @@ ROUTER_PROMPT = ChatPromptTemplate.from_messages(
             "Q: What did v1 of the leave policy say about carry-over? -> version, leave-policy, [v1], null\n"
             "Q: What was the refund window in March 2024? -> version, refund-policy, [], 2024-03-31\n"
             "Q: What changed between v1 and v3 of the refund policy? -> compare, refund-policy, [v1, v3], null\n"
-            "Q: What is new in the latest data retention standard? -> compare, data-retention, [], null",
+            "Q: What is new in the latest data retention standard? -> compare, data-retention, [], null\n"
+            "Q: What is the company's travel expense limit? -> latest, null, [], null\n"
+            "Q: And what about the other one? -> unclear, null, [], null",
         ),
         ("human", "{question}"),
     ]
