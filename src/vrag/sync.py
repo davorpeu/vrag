@@ -1,4 +1,5 @@
 import hashlib
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from vrag import store
@@ -42,13 +43,17 @@ def build_chunks(v: DocVersion) -> list[Chunk]:
     ]
 
 
-def sync(source: VersionSource) -> SyncReport:
-    """Incremental + idempotent: a version is only re-indexed if its content hash changed."""
+def sync(source: VersionSource, on_progress: Callable[[str], None] | None = None) -> SyncReport:
+    """Incremental + idempotent: a version is only re-indexed if its content hash changed.
+
+    on_progress, if given, is called with the label of each version before it is handled."""
     store.ensure_index()
     report = SyncReport()
     touched: set[str] = set()
     for v in source.iter_versions():
         label = f"{v.doc_id}@{v.version}"
+        if on_progress:
+            on_progress(label)
         meta = store.indexed_meta(v.doc_id, v.version)
         if meta and meta[0] == hashlib.sha256(v.content).hexdigest():
             if meta[1] != v.version_num:  # same text, new position in the version order

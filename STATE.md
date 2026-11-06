@@ -103,6 +103,15 @@ User checked Milestone 1 in Streamlit on 2026-11-05: good. Committed (f1d7f90).
   Repo link without --file prints candidate files and exits 1.
 - tests/test_remote.py (14, offline: local upstream repo). Fast suite 80 pass.
 
+## Add-a-repo sidebar in the UI - done 2026-11-06
+- API: POST /sources/git/inspect {url} (clone/pull, returns candidates, file from link, tag count);
+  POST /sources/git/sync {url, files, by} -> 202 job, runs sync in a background thread, one at a time (409);
+  GET /jobs/{id} (status, current version, done_count, indexed/skipped/renumbered/empty, error).
+- sync(source, on_progress=callback) reports each version label.
+- UI sidebar: link -> Check link -> pick files + tags/commits -> Load versions; st.fragment(run_every=2) polls the job.
+- Tests: tests/test_api_git.py (7), 4 sidebar tests in tests/test_ui.py. Fast suite 91 pass.
+- Note: two tags on the same commit count as one version (first tag name wins).
+
 Left:
 1. User check of the router in Streamlit (API + UI must be started; run them in your own terminals so
    Claude Code's low-memory cleanup doesn't stop them).

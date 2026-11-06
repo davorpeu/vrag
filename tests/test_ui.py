@@ -111,3 +111,84 @@ def test_ungrounded_warning_lists_issues(monkeypatch):
     err = at.error[0].value
     assert "could not be verified" in err and "after one retry" in err and "30" in err
     assert not at.success
+
+
+# -- sidebar: add a git repository ------------------------------------------------
+
+INSPECT = {
+    "repo": "data/repos/semver", "name": "semver", "action": "cloned",
+    "file": "semver.md", "candidates": ["README.md", "semver.md"], "tags": 4,
+}
+
+
+def fake_git_api(monkeypatch, job_states, inspect=INSPECT, inspect_code=200):
+    calls = []
+
+    def post(url, json, timeout):
+        calls.append((url, json))
+        if url.endswith("/sources/git/inspect"):
+            return httpx.Response(inspect_code, json=inspect, request=httpx.Request("POST", url))
+        return httpx.Response(202, json={"id": "job1"}, request=httpx.Request("POST", url))
+
+    states = iter(job_states)
+
+    def get(url, timeout):
+        return httpx.Response(200, json=next(states), request=httpx.Request("GET", url))
+
+    monkeypatch.setattr(httpx, "post", post)
+    monkeypatch.setattr(httpx, "get", get)
+    return calls
+
+
+def job(status, **kw):
+    base = {"id": "job1", "status": status, "current": None, "done_count": 0, "started": 0, "finished": None,
+            "error": None, "indexed": [], "skipped": [], "renumbered": [], "empty": []}
+    return {**base, **kw}
+
+
+def sidebar_check(at, link):
+    at.sidebar.text_input[0].input(link)
+    at.sidebar.button[0].click().run()
+    assert not at.exception
+    return at
+
+
+def test_sidebar_file_link_preselects_file_and_loads(monkeypatch):
+    calls = fake_git_api(monkeypatch, [
+        job("running", current="semver/semver@v1.0.0"),
+        job("done", indexed=["semver/semver@v1.0.0"], skipped=["semver/semver@v2.0.0"], done_count=2),
+    ])
+    at = AppTest.from_file(str(APP), default_timeout=30).run()
+    sidebar_check(at, "https://github.com/semver/semver/blob/master/semver.md")
+    assert any("semver: cloned, 4 tag(s)" in s.value for s in at.sidebar.success)
+    assert at.sidebar.multiselect[0].value == ["semver.md"]
+    at.sidebar.button[1].click().run()  # Load versions -> first poll: running
+    assert calls[-1][1] == {"url": "https://github.com/semver/semver/blob/master/semver.md", "files": ["semver.md"], "by": "tags"}
+    assert any("Now: semver/semver@v1.0.0" in i.value for i in at.sidebar.info)
+    at.run()  # next poll: done
+    msg = " ".join(s.value for s in at.sidebar.success)
+    assert "Loaded 1 new version(s), 1 already up to date" in msg and "You can ask about it now" in msg
+    at.run()  # result stays visible after the job is gone
+    assert any("Loaded 1 new version(s)" in s.value for s in at.sidebar.success)
+
+
+def test_sidebar_repo_link_needs_a_file_choice(monkeypatch):
+    fake_git_api(monkeypatch, [], inspect={**INSPECT, "file": None, "tags": 0})
+    at = sidebar_check(AppTest.from_file(str(APP), default_timeout=30).run(), "https://github.com/semver/semver")
+    assert at.sidebar.multiselect[0].value == [] and at.sidebar.multiselect[0].options == ["README.md", "semver.md"]
+    assert at.sidebar.button[1].disabled  # nothing chosen yet
+    assert any("no tags" in w.value for w in at.sidebar.warning)
+
+
+def test_sidebar_bad_link_shows_error_and_page_still_works(monkeypatch):
+    fake_git_api(monkeypatch, [], inspect={"detail": "git clone failed: repository not found"}, inspect_code=400)
+    at = sidebar_check(AppTest.from_file(str(APP), default_timeout=30).run(), "https://github.com/x/nope")
+    assert any("repository not found" in e.value for e in at.sidebar.error)
+    assert at.text_input[0].label == "Question"  # main page not stopped
+
+
+def test_sidebar_job_error_is_shown(monkeypatch):
+    fake_git_api(monkeypatch, [job("error", error="ConnectionError: elasticsearch down")])
+    at = sidebar_check(AppTest.from_file(str(APP), default_timeout=30).run(), "https://github.com/semver/semver/blob/master/semver.md")
+    at.sidebar.button[1].click().run()
+    assert any("elasticsearch down" in e.value for e in at.sidebar.error)
