@@ -156,6 +156,31 @@ def _match_versions(mentions: list[str], doc: dict) -> tuple[list[dict], list[st
     return sorted(found, key=lambda v: v["version_num"]), missing
 
 
+# Words in doc ids/titles too generic to identify a document on their own.
+GENERIC = {"policy", "standard", "document", "documents", "the", "and", "for", "version", "versions", "versioning", "docs", "readme"}
+
+
+def _name_words(doc: dict) -> set[str]:
+    text = f"{doc['doc_id']} {doc['doc_title']}".lower()
+    return {w for w in re.findall(r"[a-z]{3,}", text) if w not in GENERIC}
+
+
+def named_in(question: str, doc: dict) -> bool:
+    """True if the question uses a distinctive word from the doc's id or title ('refund', 'react', 'claude').
+    Prefix match either way covers plurals and stems ('refunds', 'versioning' / 'version...')."""
+    q_words = re.findall(r"[a-z]{3,}", question.lower())
+    for name in _name_words(doc):
+        for w in q_words:
+            if w == name or (min(len(w), len(name)) >= 4 and (w.startswith(name) or name.startswith(w))):
+                return True
+    return False
+
+
+def _which_doc(catalog: list[dict]) -> str:
+    names = "; ".join(f"{d['doc_title']} ({d['doc_id']})" for d in catalog)
+    return f"Name the document in your question. Indexed: {names}."
+
+
 def _available(doc: dict) -> str:
     return f"{doc['doc_title']} has versions " + ", ".join(v["version"] for v in doc["versions"])
 
@@ -165,8 +190,33 @@ def resolve(
     decision: RouteDecision,
     catalog: list[dict],
     top_doc: Callable[[list[str] | None], str | None],
+    focus: str | None = None,
 ) -> Route:
-    """top_doc(doc_ids) returns the doc_id best matching the question (search), limited to doc_ids if given."""
+    """top_doc(doc_ids) returns the doc_id best matching the question (search), limited to doc_ids if given.
+
+    focus = doc_id the user picked in the UI: every question is about that document, so
+    "what's in this document?" needs no name, and a 'latest' answer searches only that document."""
+    if focus:
+        doc = _find_doc(focus, catalog)
+        if doc is None:
+            return Route("unclear", note=f"Document {focus!r} is not indexed.")
+        if decision.intent == "unclear":  # "what's in this document?" -> read its latest version
+            decision = decision.model_copy(update={"intent": "latest"})
+        route = _resolve(question, decision.model_copy(update={"document": doc["doc_id"]}), [doc], top_doc, doc)
+        if route.intent == "latest":
+            route.doc_id = doc["doc_id"]
+            route.note = f"Latest version of {doc['doc_title']} ({doc['versions'][-1]['version']})."
+        return route
+    return _resolve(question, decision, catalog, top_doc)
+
+
+def _resolve(
+    question: str,
+    decision: RouteDecision,
+    catalog: list[dict],
+    top_doc: Callable[[list[str] | None], str | None],
+    forced: dict | None = None,
+) -> Route:
     if not catalog:
         return Route("unclear", note="Nothing is indexed yet.")
 
@@ -183,8 +233,11 @@ def resolve(
     mentions = list({norm_version(m): m for m in reversed(llm_mentions + text_mentions)}.values())[::-1]
     intent = decision.intent
 
-    # Which document?
-    doc = _find_doc(decision.document, catalog)
+    # Which document? Only accepted with evidence from the question:
+    # named in it, the only doc having the mentioned versions, or the LLM and the search agree.
+    # A guess with no evidence (the LLM picking a doc for "what changed in X?") is not accepted.
+    llm_doc = _find_doc(decision.document, catalog)
+    doc = forced or (llm_doc if llm_doc and named_in(question, llm_doc) else None)
     if doc is None and mentions:
         # only docs that actually have every mentioned version
         candidates = [d for d in catalog if not _match_versions(mentions, d)[1]]
@@ -193,10 +246,12 @@ def resolve(
         elif candidates:
             doc = _find_doc(top_doc([d["doc_id"] for d in candidates]), catalog)
     if doc is None and intent != "latest":
-        doc = _find_doc(top_doc(None), catalog)
+        searched = _find_doc(top_doc(None), catalog)
+        if searched and (searched is llm_doc or named_in(question, searched)):
+            doc = searched
 
     if intent == "unclear":
-        hint = f" {_available(doc)}." if doc else ""
+        hint = f" {_available(doc)}." if doc else " " + _which_doc(catalog)
         return Route("unclear", doc["doc_id"] if doc else None, note="Could not tell what is being asked." + hint)
 
     if intent == "latest":
@@ -205,7 +260,8 @@ def resolve(
         else:
             return Route("latest", note="Latest version of each document.")
 
-    assert doc is not None
+    if doc is None:
+        return Route("unclear", note="Which document do you mean? " + _which_doc(catalog))
     found, missing = _match_versions(mentions, doc)
     if missing:
         return Route(

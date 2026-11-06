@@ -66,6 +66,8 @@ def sync(
     typer.echo(f"skipped {len(r.skipped)} unchanged")
     if r.renumbered:
         typer.echo(f"renumbered {len(r.renumbered)} (version order changed): {', '.join(r.renumbered)}")
+    if r.removed:
+        typer.echo(f"removed {len(r.removed)} (no longer in the source): {', '.join(r.removed)}")
     if r.empty:
         typer.echo(f"no text extracted from: {', '.join(r.empty)}")
 

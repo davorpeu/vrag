@@ -52,9 +52,14 @@ def _git(*args: str) -> str:
     return r.stdout
 
 
+def clone_path(link: RepoLink, root: str | Path = "data/repos") -> Path:
+    """Where ensure_clone puts this repo (no network)."""
+    return Path(root) / link.name
+
+
 def ensure_clone(link: RepoLink, root: str | Path = "data/repos") -> tuple[Path, str]:
     """Clone the repo, or pull it if already cloned. Returns (path, 'cloned' | 'updated')."""
-    dest = Path(root) / link.name
+    dest = clone_path(link, root)
     if (dest / ".git").exists():
         origin = _git("-C", str(dest), "remote", "get-url", "origin").strip()
         if _norm_remote(origin) != _norm_remote(link.clone_url):

@@ -67,7 +67,33 @@ with st.sidebar:
         )
         if by == "tags" and info["tags"] == 0:
             st.warning("This repository has no tags. Choose 'commits'.")
-        if st.button("Load versions", type="primary", disabled=not files):
+        ok_to_load = bool(files)
+        if files:
+            key = (info["url"], tuple(files), by)
+            if st.session_state.get("git_preview_key") != key:
+                try:
+                    r = httpx.post(
+                        f"{API_URL}/sources/git/preview", json={"url": info["url"], "files": files, "by": by}, timeout=120
+                    )
+                    preview = r.json() if r.status_code == 200 else []
+                except (httpx.HTTPError, ValueError):
+                    preview = []
+                st.session_state["git_preview"], st.session_state["git_preview_key"] = preview, key
+            preview = st.session_state["git_preview"]
+            for p in preview:
+                st.caption(f"{p['file']}: {p['versions']} version(s), newest {p['size_kb']} KB")
+            if any(p["versions"] == 0 for p in preview):
+                st.warning("A chosen file has no versions this way (try the other option).")
+            total = sum(p["versions"] for p in preview)
+            big = total > 30 or any(p["size_kb"] > 100 for p in preview)
+            if big:
+                minutes = max(1, round(total * max(1, max(p["size_kb"] for p in preview) / 10) * 2 / 60))
+                st.warning(
+                    f"This is a big load: {total} versions. With the local model it may take around "
+                    f"{minutes} minutes or more, and it can't be stopped from here."
+                )
+                ok_to_load = st.checkbox("Load it anyway")
+        if st.button("Load versions", type="primary", disabled=not ok_to_load):
             st.session_state.pop("git_result", None)
             try:
                 r = httpx.post(
@@ -103,24 +129,58 @@ with st.sidebar:
             done = ("error", f"Loading failed: {job['error']}")
         else:
             lines = [f"Loaded {len(job['indexed'])} new version(s), {len(job['skipped'])} already up to date."]
+            if job.get("removed"):
+                lines.append(f"Replaced {len(job['removed'])} version(s) from an earlier load.")
             if job["renumbered"]:
                 lines.append("Re-ordered: " + ", ".join(job["renumbered"]))
             if job["indexed"]:
                 lines.append("New: " + ", ".join(job["indexed"]))
             if job["empty"]:
                 lines.append("No text found in: " + ", ".join(job["empty"]))
-            done = ("ok", "  \n".join(lines) + "  \nYou can ask about it now.")
+            done = ("ok", "  \n".join(lines) + "  \nIt is now selected as the document to ask about.")
+            loaded = [label.split("@")[0] for label in job["indexed"] + job["renumbered"] + job["skipped"]]
+            if loaded:
+                st.session_state["pending_focus"] = loaded[0]
         st.session_state["git_result"] = done
+        if done[0] == "ok" and "pending_focus" in st.session_state:
+            st.rerun()  # whole page, so the document picker switches to the loaded document
         (st.error if done[0] == "error" else st.success)(done[1])
 
     job_status()
 
+
+def _documents() -> list[dict]:
+    try:
+        r = httpx.get(f"{API_URL}/documents", timeout=10)
+        r.raise_for_status()
+        return r.json()
+    except (httpx.HTTPError, ValueError):
+        return []
+
+
+ALL = "__all__"
+docs = {d["doc_id"]: d for d in _documents()}
+if "pending_focus" in st.session_state:
+    st.session_state["doc_focus"] = st.session_state.pop("pending_focus")
+if st.session_state.get("doc_focus", ALL) not in (ALL, *docs):
+    st.session_state["doc_focus"] = ALL
+
+
+def _doc_label(doc_id: str) -> str:
+    if doc_id == ALL:
+        return "All documents (name the document in your question)"
+    d = docs[doc_id]
+    return f"{d['doc_title']} ({doc_id}) - {len(d['versions'])} versions, latest {d['versions'][-1]['version']}"
+
+
+focus = st.selectbox("Document", [ALL, *docs], format_func=_doc_label, key="doc_focus")
 question = st.text_input("Question", placeholder="How many days do customers have to request a refund?")
 
 if st.button("Ask", type="primary") and question:
     with st.spinner("Searching and answering (local model, can take ~30s)..."):
         try:
-            r = httpx.post(f"{API_URL}/ask", json={"question": question}, timeout=300)
+            body = {"question": question, "doc_id": None if focus == ALL else focus}
+            r = httpx.post(f"{API_URL}/ask", json=body, timeout=300)
             r.raise_for_status()
             res = r.json()
         except httpx.HTTPError as e:

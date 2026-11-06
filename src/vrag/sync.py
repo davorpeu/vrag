@@ -15,6 +15,7 @@ class SyncReport:
     skipped: list[str] = field(default_factory=list)
     empty: list[str] = field(default_factory=list)
     renumbered: list[str] = field(default_factory=list)
+    removed: list[str] = field(default_factory=list)  # indexed versions the source no longer has
 
 
 def build_chunks(v: DocVersion) -> list[Chunk]:
@@ -50,8 +51,10 @@ def sync(source: VersionSource, on_progress: Callable[[str], None] | None = None
     store.ensure_index()
     report = SyncReport()
     touched: set[str] = set()
+    produced: dict[str, set[str]] = {}
     for v in source.iter_versions():
         label = f"{v.doc_id}@{v.version}"
+        produced.setdefault(v.doc_id, set()).add(v.version)
         if on_progress:
             on_progress(label)
         meta = store.indexed_meta(v.doc_id, v.version)
@@ -70,6 +73,14 @@ def sync(source: VersionSource, on_progress: Callable[[str], None] | None = None
         store.replace_version(chunks)
         touched.add(v.doc_id)
         report.indexed.append(label)
+    # The source is the truth for every doc it produced: drop versions it no longer has
+    # (e.g. a file first loaded by commits, then by tags; a version deleted from the DB/folder).
+    # Only runs after a complete pass, so an interrupted sync never deletes anything.
+    for doc_id, versions in produced.items():
+        for stale in sorted(store.indexed_versions(doc_id) - versions):
+            store.delete_version(doc_id, stale)
+            report.removed.append(f"{doc_id}@{stale}")
+            touched.add(doc_id)
     for doc_id in touched:
         store.refresh_latest(doc_id)
     return report

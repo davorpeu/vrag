@@ -49,11 +49,29 @@ UNCLEAR = {
 }
 
 
-def run_ui(monkeypatch, payload):
+DOCS = [
+    {"doc_id": "refund-policy", "doc_title": "Acme Retail Refund Policy",
+     "versions": [{"version": "v1"}, {"version": "v2"}, {"version": "v3"}]},
+    {"doc_id": "semver/semver", "doc_title": "Semantic Versioning 2.0.0",
+     "versions": [{"version": "v1.0.0"}, {"version": "v2.0.0"}]},
+]
+
+
+def fake_documents(monkeypatch, docs=DOCS):
+    def get(url, timeout):
+        return httpx.Response(200, json=docs, request=httpx.Request("GET", url))
+
+    monkeypatch.setattr(httpx, "get", get)
+
+
+def run_ui(monkeypatch, payload, sent=None):
     def fake_post(url, json, timeout):
+        if sent is not None:
+            sent.append(json)
         return httpx.Response(200, json=payload, request=httpx.Request("POST", url))
 
     monkeypatch.setattr(httpx, "post", fake_post)
+    fake_documents(monkeypatch)
     at = AppTest.from_file(str(APP), default_timeout=30).run()
     at.text_input[0].input(payload["question"])
     at.button[0].click().run()
@@ -84,6 +102,7 @@ def test_api_error_is_shown(monkeypatch):
         raise httpx.ConnectError("connection refused")
 
     monkeypatch.setattr(httpx, "post", failing_post)
+    fake_documents(monkeypatch)
     at = AppTest.from_file(str(APP), default_timeout=30).run()
     at.text_input[0].input("anything")
     at.button[0].click().run()
@@ -121,10 +140,13 @@ INSPECT = {
 }
 
 
-def fake_git_api(monkeypatch, job_states, inspect=INSPECT, inspect_code=200):
+def fake_git_api(monkeypatch, job_states, inspect=INSPECT, inspect_code=200, preview=None):
     calls = []
 
     def post(url, json, timeout):
+        if url.endswith("/sources/git/preview"):
+            rows = preview or [{"file": f, "versions": 4, "size_kb": 12} for f in json["files"]]
+            return httpx.Response(200, json=rows, request=httpx.Request("POST", url))
         calls.append((url, json))
         if url.endswith("/sources/git/inspect"):
             return httpx.Response(inspect_code, json=inspect, request=httpx.Request("POST", url))
@@ -133,6 +155,8 @@ def fake_git_api(monkeypatch, job_states, inspect=INSPECT, inspect_code=200):
     states = iter(job_states)
 
     def get(url, timeout):
+        if url.endswith("/documents"):
+            return httpx.Response(200, json=DOCS, request=httpx.Request("GET", url))
         return httpx.Response(200, json=next(states), request=httpx.Request("GET", url))
 
     monkeypatch.setattr(httpx, "post", post)
@@ -167,7 +191,8 @@ def test_sidebar_file_link_preselects_file_and_loads(monkeypatch):
     assert any("Now: semver/semver@v1.0.0" in i.value for i in at.sidebar.info)
     at.run()  # next poll: done
     msg = " ".join(s.value for s in at.sidebar.success)
-    assert "Loaded 1 new version(s), 1 already up to date" in msg and "You can ask about it now" in msg
+    assert "Loaded 1 new version(s), 1 already up to date" in msg and "now selected" in msg
+    assert at.selectbox[0].value == "semver/semver"  # picker switched to the loaded document
     at.run()  # result stays visible after the job is gone
     assert any("Loaded 1 new version(s)" in s.value for s in at.sidebar.success)
 
@@ -192,3 +217,61 @@ def test_sidebar_job_error_is_shown(monkeypatch):
     at = sidebar_check(AppTest.from_file(str(APP), default_timeout=30).run(), "https://github.com/semver/semver/blob/master/semver.md")
     at.sidebar.button[1].click().run()
     assert any("elasticsearch down" in e.value for e in at.sidebar.error)
+
+
+# -- document picker -----------------------------------------------------------------
+
+
+def test_picker_defaults_to_all_and_sends_no_doc(monkeypatch):
+    sent = []
+    at = run_ui(monkeypatch, COMPARE, sent)
+    assert at.selectbox[0].value == "__all__" and sent[-1]["doc_id"] is None
+    assert at.selectbox[0].options[1:] == [
+        "Acme Retail Refund Policy (refund-policy) - 3 versions, latest v3",
+        "Semantic Versioning 2.0.0 (semver/semver) - 2 versions, latest v2.0.0",
+    ]
+
+
+def test_picked_document_is_sent_with_the_question(monkeypatch):
+    sent = []
+
+    def fake_post(url, json, timeout):
+        sent.append(json)
+        return httpx.Response(200, json=COMPARE, request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    fake_documents(monkeypatch)
+    at = AppTest.from_file(str(APP), default_timeout=30).run()
+    at.selectbox[0].select("semver/semver").run()
+    at.text_input[0].input("whats in this document")
+    at.button[0].click().run()
+    assert sent[-1] == {"question": "whats in this document", "doc_id": "semver/semver"}
+
+
+def test_page_works_when_document_list_unavailable(monkeypatch):
+    def down(url, timeout):
+        raise httpx.ConnectError("refused")
+
+    monkeypatch.setattr(httpx, "get", down)
+    at = AppTest.from_file(str(APP), default_timeout=30).run()
+    assert not at.exception and at.selectbox[0].options == ["All documents (name the document in your question)"]
+
+
+def test_sidebar_shows_version_count(monkeypatch):
+    fake_git_api(monkeypatch, [])
+    at = sidebar_check(AppTest.from_file(str(APP), default_timeout=30).run(), "https://github.com/semver/semver/blob/master/semver.md")
+    assert any("semver.md: 4 version(s), newest 12 KB" in c.value for c in at.sidebar.caption)
+    assert not at.sidebar.button[1].disabled and not at.sidebar.checkbox
+
+
+def test_big_load_needs_confirmation(monkeypatch):
+    calls = fake_git_api(
+        monkeypatch, [job("running")], preview=[{"file": "semver.md", "versions": 226, "size_kb": 287}]
+    )
+    at = sidebar_check(AppTest.from_file(str(APP), default_timeout=30).run(), "https://github.com/semver/semver/blob/master/semver.md")
+    assert any("big load: 226 versions" in w.value for w in at.sidebar.warning)
+    assert at.sidebar.button[1].disabled
+    at.sidebar.checkbox[0].check().run()
+    assert not at.sidebar.button[1].disabled
+    at.sidebar.button[1].click().run()
+    assert calls[-1][0].endswith("/sources/git/sync")

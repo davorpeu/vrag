@@ -38,6 +38,7 @@ def upstream(tmp_path):
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.setattr(api, "ensure_clone", lambda link: remote.ensure_clone(link, tmp_path / "repos"))
+    monkeypatch.setattr(api, "clone_path", lambda link: remote.clone_path(link, tmp_path / "repos"))
     api.JOBS.clear()
     return TestClient(api.app)
 
@@ -121,3 +122,16 @@ def test_second_sync_while_running_is_409(client, upstream, monkeypatch):
 
 def test_unknown_job_is_404(client):
     assert client.get("/jobs/nope").status_code == 404
+
+
+def test_preview_counts_versions_per_mode(client, upstream):
+    client.post("/sources/git/inspect", json={"url": str(upstream)})
+    tags = client.post("/sources/git/preview", json={"url": str(upstream), "files": ["policy.md"], "by": "tags"}).json()
+    commits = client.post("/sources/git/preview", json={"url": str(upstream), "files": ["policy.md"], "by": "commits"}).json()
+    assert tags == [{"file": "policy.md", "versions": 2, "size_kb": 1}]
+    assert commits[0]["versions"] == 2
+
+
+def test_preview_before_inspect_is_400(client, upstream):
+    r = client.post("/sources/git/preview", json={"url": str(upstream), "files": ["policy.md"]})
+    assert r.status_code == 400 and "Check the link first" in r.json()["detail"]

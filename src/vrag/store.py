@@ -110,6 +110,26 @@ def replace_version(chunks: list[Chunk]) -> None:
     helpers.bulk(es(), actions, refresh=True)
 
 
+def indexed_versions(doc_id: str) -> set[str]:
+    """Version labels currently indexed for a document."""
+    s = get_settings()
+    res = es().search(
+        index=s.es_index,
+        size=0,
+        query={"term": {"doc_id": doc_id}},
+        aggs={"v": {"terms": {"field": "version", "size": 10000}}},
+    )
+    return {b["key"] for b in res["aggregations"]["v"]["buckets"]}
+
+
+def delete_version(doc_id: str, version: str) -> None:
+    es().delete_by_query(
+        index=get_settings().es_index,
+        query={"bool": {"filter": [{"term": {"doc_id": doc_id}}, {"term": {"version": version}}]}},
+        refresh=True,
+    )
+
+
 def refresh_latest(doc_id: str) -> None:
     """Mark only the highest version_num of a doc as is_latest."""
     s = get_settings()

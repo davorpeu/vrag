@@ -158,3 +158,82 @@ def test_is_general_question(q, general):
     from vrag.answer import is_general_question
 
     assert is_general_question(q, "leave-policy" if "leave" in q else "refund-policy", "Acme Retail Refund Policy") is general
+
+
+# -- document must be backed by the question ------------------------------------
+
+REACT = {
+    "doc_id": "react/CLAUDE",
+    "doc_title": "React",
+    "versions": [
+        {"version": "a0566250", "version_num": 1, "effective_date": "2026-01-23"},
+        {"version": "03e77555", "version_num": 2, "effective_date": "2026-06-09"},
+    ],
+}
+
+
+def run2(q, decision, top):
+    return resolve(q, decision, [*CATALOG, REACT], lambda ids: top)
+
+
+def test_unnamed_doc_guess_by_llm_and_search_disagree_is_unclear():
+    # the real failure: LLM guessed leave-policy, search guessed semver, question names neither
+    r = run2("What has changed in forbidding agents from doing?", D("compare", "leave-policy"), top="semver/semver")
+    assert r.intent == "unclear" and r.doc_id is None
+    assert "Which document" in r.note and "React (react/CLAUDE)" in r.note
+
+
+def test_unclear_without_named_doc_lists_documents_not_a_search_guess():
+    r = run2("what has changed in forbiding agents from doing", D("unclear"), top="semver/semver")
+    assert r.intent == "unclear" and r.doc_id is None and "Indexed:" in r.note and "has versions" not in r.note
+
+
+def test_named_doc_by_filename_word():
+    r = run2("what changed in the react claude.md about agents", D("compare", "react/CLAUDE"), top="semver/semver")
+    assert (r.intent, r.doc_id, r.versions) == ("compare", "react/CLAUDE", ["a0566250", "03e77555"])
+
+
+def test_unnamed_doc_accepted_when_llm_and_search_agree():
+    r = run2("How long were application logs kept before the change?", D("compare", "leave-policy"), top="leave-policy")
+    assert r.intent == "compare" and r.doc_id == "leave-policy"
+
+
+def test_search_doc_accepted_when_named_even_if_llm_gave_none():
+    r = run2("What changed in the refunds rules?", D("compare"), top="refund-policy")
+    assert r.doc_id == "refund-policy"
+
+
+def test_word_version_does_not_name_semver():
+    r = run2("What changed in the latest version?", D("compare", "semver/semver"), top="refund-policy")
+    assert r.intent == "unclear"
+
+
+# -- focus: user picked a document in the UI ---------------------------------------
+
+
+def run_focus(q, decision, focus="react/CLAUDE"):
+    return resolve(q, decision, [*CATALOG, REACT], lambda ids: "semver/semver", focus=focus)
+
+
+def test_focus_unclear_question_reads_latest_of_that_doc():
+    r = run_focus("whats in this document", D("unclear"))
+    assert (r.intent, r.doc_id) == ("latest", "react/CLAUDE") and "03e77555" in r.note
+
+
+def test_focus_latest_keeps_doc():
+    r = run_focus("what does it say about the compiler?", D("latest", "semver/semver"))
+    assert (r.intent, r.doc_id) == ("latest", "react/CLAUDE")
+
+
+def test_focus_compare_without_naming_doc():
+    r = run_focus("what has changed in forbidding agents from doing?", D("compare", "leave-policy"))
+    assert (r.intent, r.doc_id, r.versions) == ("compare", "react/CLAUDE", ["a0566250", "03e77555"])
+
+
+def test_focus_version_not_in_that_doc_is_unclear():
+    r = run_focus("what did v2 say?", D("version", None, ["v2"]))
+    assert r.intent == "unclear" and "v2 not found" in r.note and "React has versions" in r.note
+
+
+def test_focus_unknown_doc():
+    assert run_focus("anything", D("latest"), focus="gone").intent == "unclear"

@@ -84,6 +84,14 @@ class GitSource(VersionSource):
                 sha = None
         return list(reversed(revs))  # git log is newest-first
 
+    def preview(self, path: str) -> tuple[int, int]:
+        """(number of versions, size in bytes of the newest one) for a file, without reading every version."""
+        revs = self._tag_revs(path) if self.by == "tags" else self._commit_revs(path)
+        if not revs:
+            return 0, 0
+        size = int(self._git("cat-file", "-s", f"{revs[-1].sha}:{revs[-1].path}").decode().strip())
+        return len(revs), size
+
     def iter_versions(self) -> Iterator[DocVersion]:
         for f in self.files:
             revs = self._tag_revs(f) if self.by == "tags" else self._commit_revs(f)

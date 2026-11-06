@@ -20,5 +20,8 @@
   {"q": "What was the hotel limit in v1.0 of the travel policy?", "intent": "version", "doc": "travel-expense-policy", "versions": ["v1.0"]},
   {"q": "How many days did I have to submit expense claims in March 2024?", "intent": "version", "doc": "travel-expense-policy", "versions": ["v1.0"]},
   {"q": "What changed in version 2.0 of the travel and expense policy?", "intent": "compare", "doc": "travel-expense-policy", "versions": ["v1.1", "v2.0"]},
-  {"q": "What changed between v1.0 and v2.0 of the travel policy?", "intent": "compare", "doc": "travel-expense-policy", "versions": ["v1.0", "v2.0"]}
+  {"q": "What changed between v1.0 and v2.0 of the travel policy?", "intent": "compare", "doc": "travel-expense-policy", "versions": ["v1.0", "v2.0"]},
+  {"q": "what has changed in forbiding agents from doing", "intent": "unclear"},
+  {"q": "What has changed in forbidding agents from doing?", "intent": "unclear"},
+  {"q": "What changed in the React CLAUDE.md?", "intent": "compare", "doc": "react/CLAUDE", "versions": ["a0566250", "03e77555"]}
 ]

@@ -64,6 +64,7 @@ def test_sync_renumbers_without_reembedding(monkeypatch):
     monkeypatch.setattr(sync_mod.store, "set_version_num", lambda d, v, n: calls["renumber"].append((d, v, n)))
     monkeypatch.setattr(sync_mod.store, "replace_version", lambda chunks: calls.__setitem__("replace", calls["replace"] + 1))
     monkeypatch.setattr(sync_mod.store, "refresh_latest", lambda d: calls["latest"].append(d))
+    monkeypatch.setattr(sync_mod.store, "indexed_versions", lambda d: {"v1", "v0.9"})
 
     src = DbSource("unused", connect=rows(
         row("t", "v0.9", date(2023, 1, 1), 5, content=b"# T\nolder"),  # new, back-dated
@@ -74,3 +75,38 @@ def test_sync_renumbers_without_reembedding(monkeypatch):
     assert report.renumbered == ["t@v1"] and calls["renumber"] == [("t", "v1", 2)]
     assert report.indexed == ["t@v0.9"] and calls["replace"] == 1
     assert calls["latest"] == ["t"]
+
+
+def test_sync_removes_versions_the_source_no_longer_has(monkeypatch):
+    # file loaded by commits first (sha labels), then by tags: the sha versions must go
+    from vrag import sync as sync_mod
+
+    calls = {"deleted": [], "latest": []}
+    monkeypatch.setattr(sync_mod.store, "ensure_index", lambda: None)
+    monkeypatch.setattr(sync_mod.store, "indexed_meta", lambda d, v: None)
+    monkeypatch.setattr(sync_mod.store, "replace_version", lambda chunks: None)
+    monkeypatch.setattr(sync_mod.store, "refresh_latest", lambda d: calls["latest"].append(d))
+    monkeypatch.setattr(sync_mod.store, "indexed_versions", lambda d: {"a0566250", "03e77555", "v1.0"} if d == "t" else set())
+    monkeypatch.setattr(sync_mod.store, "delete_version", lambda d, v: calls["deleted"].append((d, v)))
+    src = DbSource("unused", connect=rows(row("t", "v1.0", date(2024, 1, 1), 1), row("t", "v1.1", date(2024, 2, 1), 2)))
+    report = sync_mod.sync(src)
+    assert calls["deleted"] == [("t", "03e77555"), ("t", "a0566250")]
+    assert report.removed == ["t@03e77555", "t@a0566250"] and calls["latest"] == ["t"]
+
+
+def test_interrupted_sync_deletes_nothing(monkeypatch):
+    from vrag import sync as sync_mod
+
+    deleted = []
+    monkeypatch.setattr(sync_mod.store, "ensure_index", lambda: None)
+    monkeypatch.setattr(sync_mod.store, "indexed_meta", lambda d, v: None)
+    monkeypatch.setattr(sync_mod.store, "indexed_versions", lambda d: {"old"})
+    monkeypatch.setattr(sync_mod.store, "delete_version", lambda d, v: deleted.append(v))
+
+    def fail(chunks):
+        raise ConnectionError("es down")
+
+    monkeypatch.setattr(sync_mod.store, "replace_version", fail)
+    with pytest.raises(ConnectionError):
+        sync_mod.sync(DbSource("unused", connect=rows(row("t", "v1", date(2024, 1, 1), 1))))
+    assert deleted == []

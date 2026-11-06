@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field  # noqa: E402
 from vrag import answer, store  # noqa: E402
 from vrag.models import AskResponse  # noqa: E402
 from vrag.sources.git import GitSource  # noqa: E402
-from vrag.sources.remote import ensure_clone, parse_link, suggest_files  # noqa: E402
+from vrag.sources.remote import clone_path, ensure_clone, parse_link, suggest_files  # noqa: E402
 from vrag.sync import sync as run_sync  # noqa: E402
 
 app = FastAPI(title="versioned-rag")
@@ -21,6 +21,7 @@ app = FastAPI(title="versioned-rag")
 
 class AskRequest(BaseModel):
     question: str
+    doc_id: str | None = None  # restrict the question to one document
 
 
 @app.get("/health")
@@ -28,10 +29,16 @@ def health() -> dict:
     return {"elasticsearch": store.es().ping()}
 
 
+@app.get("/documents")
+def documents() -> list[dict]:
+    """Indexed documents with their versions, oldest first."""
+    return store.catalog()
+
+
 @app.post("/ask", response_model=AskResponse)
 def ask(req: AskRequest) -> AskResponse:
     try:
-        return answer.ask(req.question)
+        return answer.ask(req.question, req.doc_id)
     finally:
         answer.flush()
 
@@ -58,6 +65,33 @@ class GitSyncRequest(BaseModel):
     by: Literal["tags", "commits"] = "tags"
 
 
+class FilePreview(BaseModel):
+    file: str
+    versions: int
+    size_kb: int  # newest version
+
+
+# Above this a load takes long with the local model (rough: 10-60 s per version, more for big files).
+BIG_VERSIONS = 30
+BIG_KB = 100
+
+
+@app.post("/sources/git/preview", response_model=list[FilePreview])
+def git_preview(req: GitSyncRequest) -> list[FilePreview]:
+    """How many versions each file would get, from the clone made by /inspect (no download)."""
+    try:
+        path = clone_path(parse_link(req.url))
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    if not (path / ".git").exists():
+        raise HTTPException(400, "Check the link first (repository not downloaded yet).")
+    out = []
+    for f in req.files:
+        n, size = GitSource(path, [f], by=req.by).preview(f.replace("\\", "/"))
+        out.append(FilePreview(file=f, versions=n, size_kb=-(-size // 1024)))
+    return out
+
+
 class Job(BaseModel):
     id: str
     status: Literal["running", "done", "error"] = "running"
@@ -69,6 +103,7 @@ class Job(BaseModel):
     indexed: list[str] = []
     skipped: list[str] = []
     renumbered: list[str] = []
+    removed: list[str] = []
     empty: list[str] = []
 
 
@@ -104,6 +139,7 @@ def _run_job(job: Job, src: GitSource) -> None:
     try:
         r = run_sync(src, on_progress=progress)
         job.indexed, job.skipped, job.renumbered, job.empty = r.indexed, r.skipped, r.renumbered, r.empty
+        job.removed = r.removed
         job.done_count = len(r.indexed) + len(r.skipped) + len(r.renumbered) + len(r.empty)
         job.status = "done"
     except Exception as e:  # noqa: BLE001 - reported to the UI

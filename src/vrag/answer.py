@@ -285,8 +285,9 @@ def _plain(question: str, route: router.Route, text: str, insufficient: bool = T
 
 
 @observe(name="ask")
-def ask(question: str) -> AskResponse:
-    route = route_question(question)
+def ask(question: str, doc_id: str | None = None) -> AskResponse:
+    """doc_id: optional document the user picked; all questions are then about that document."""
+    route = route_question(question, doc_id)
     # Sets the tag on the root span and everything after it.
     with propagate_attributes(tags=[f"pipeline:{route.intent}"]):
         if route.intent == "latest":
@@ -299,8 +300,10 @@ def ask(question: str) -> AskResponse:
 
 
 @observe(name="route")
-def route_question(question: str) -> router.Route:
+def route_question(question: str, focus: str | None = None) -> router.Route:
     catalog = store.catalog()
+    if focus:  # the LLM only sees the chosen document
+        catalog = [d for d in catalog if d["doc_id"] == focus] or catalog
     decision = router.classify(question, catalog, callbacks=[CallbackHandler()])
 
     def top_doc(doc_ids: list[str] | None) -> str | None:
@@ -310,16 +313,21 @@ def route_question(question: str) -> router.Route:
         hits = store.hybrid_search(question, filters=filters, top_k=1)
         return hits[0]["doc_id"] if hits else None
 
-    route = router.resolve(question, decision, catalog, top_doc)
+    route = router.resolve(question, decision, catalog, top_doc, focus=focus)
     get_client().update_current_span(output={"decision": decision.model_dump(), "route": vars(route)})
     return route
 
 
 @observe(name="answer-latest")
 def answer_latest(question: str, route: router.Route) -> AskResponse:
-    hits = store.hybrid_search(question)
+    if route.doc_id:  # user picked a document
+        filters = [{"term": {"is_latest": True}}, {"term": {"doc_id": route.doc_id}}]
+        scope = "Sources are from the latest version of the document the user selected."
+    else:
+        filters, scope = None, "Sources are from the latest version of each document."
+    hits = store.hybrid_search(question, filters=filters)
     context, labelled = format_context(hits)
-    inputs = {"question": question, "context": context, "scope": "Sources are from the latest version of each document."}
+    inputs = {"question": question, "context": context, "scope": scope}
     checked, retried = _answer_checked(inputs, labelled, question, "llm-latest")
     return _response(question, route, checked, retried)
 

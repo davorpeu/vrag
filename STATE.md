@@ -112,6 +112,19 @@ User checked Milestone 1 in Streamlit on 2026-11-05: good. Committed (f1d7f90).
 - Tests: tests/test_api_git.py (7), 4 sidebar tests in tests/test_ui.py. Fast suite 91 pass.
 - Note: two tags on the same commit count as one version (first tag name wins).
 
+## Document picker, router doc check, stale-version cleanup - done 2026-11-06
+- Router: a doc is accepted only if the question names it (named_in: distinctive id/title words),
+  or it is the only doc with the mentioned versions, or LLM and search agree. Else unclear + list of docs.
+  (Was: 'what has changed in forbidding agents' guessed semver/leave-policy.) Router eval 25/25.
+- Focus: /ask {question, doc_id}; resolve(focus=...) forces that doc; unclear -> latest of that doc;
+  answer_latest filters by route.doc_id. UI: 'Document' selectbox (GET /documents), switches to a repo after loading.
+- sync removes indexed versions the source no longer produces (report.removed), only after a complete pass.
+  Fixes react/CLAUDE mixing commit-SHA versions and tag versions after loading it both ways.
+- POST /sources/git/preview -> versions + size per file; UI warns over 30 versions or 100 KB and needs a checkbox.
+- Fast suite 111 pass; e2e 22/22 (run before the focus change).
+- LIVE: react/CHANGELOG (commits mode, 226 versions, 290 KB) was loading in the API at 59/226 on 2026-11-06.
+  API restart needed for prune + preview; restarting kills that load. react/CLAUDE still mixed until re-synced by tags.
+
 Left:
 1. User check of the router in Streamlit (API + UI must be started; run them in your own terminals so
    Claude Code's low-memory cleanup doesn't stop them).
