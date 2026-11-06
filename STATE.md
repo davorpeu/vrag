@@ -1,5 +1,7 @@
 # State (updated 2026-11-05)
 
+Rules: read `agents/RULES.md` first.
+
 ## Decisions
 - Python 3.10 venv (.venv), LangChain + Ollama (qwen2.5:7b answers, nomic-embed-text embeddings), no paid APIs.
 - Elasticsearch hybrid BM25 + kNN, RRF fused in Python (works on Basic license). Reranker later.
@@ -92,6 +94,14 @@ User checked Milestone 1 in Streamlit on 2026-11-05: good. Committed (f1d7f90).
 - Seed: `.venv/Scripts/python scripts/seed_db.py` (travel-expense-policy v1.0/v1.1/v2.0, DB only), then
   `.venv/Scripts/vrag sync db`. Golden changes added; eval_diff 8/8, router eval 22/22.
 - Tests: 66 fast pass; e2e 22/22 (5 new travel questions + 2 live DB tests).
+
+## Git --url option - done 2026-11-06
+- src/vrag/sources/remote.py: parse_link (GitHub repo/tree/blob/raw links, any git URL or path),
+  ensure_clone (clone to data/repos/<name>, or fetch --tags + pull --ff-only if cloned; refuses a folder
+  cloned from a different origin), suggest_files (doc files, shallowest first).
+- CLI: `vrag sync git --url https://github.com/semver/semver/blob/master/semver.md` (file link sets --file).
+  Repo link without --file prints candidate files and exits 1.
+- tests/test_remote.py (14, offline: local upstream repo). Fast suite 80 pass.
 
 Left:
 1. User check of the router in Streamlit (API + UI must be started; run them in your own terminals so
