@@ -125,6 +125,17 @@ User checked Milestone 1 in Streamlit on 2026-11-05: good. Committed (f1d7f90).
 - LIVE: react/CHANGELOG (commits mode, 226 versions, 290 KB) was loading in the API at 59/226 on 2026-11-06.
   API restart needed for prune + preview; restarting kills that load. react/CLAUDE still mixed until re-synced by tags.
 
+## UI redesign - done 2026-11-06
+- Sidebar = document library (st.radio styled as a nav list; selection = what questions are about) +
+  'Add from GitHub' expander: one link field + Add. File link adds directly; repo link asks 'Which file?';
+  tags if the file has >=2 tagged versions else commits (automatic); >30 versions or >100 KB asks 'Add anyway'.
+- Main = chat (st.chat_input, history in session). Answer: context line, version timeline (used versions filled,
+  compare old=amber/new=blue, long histories shortened), answer, one-line check, 'Sources (n)' expander with serif quotes.
+- Theme in .streamlit/config.toml (light, IBM Plex Sans; Plex Serif for quotes). Restart Streamlit after theme edits.
+- Screenshots: .shots/shoot.py (gitignored; Playwright in venv using installed Chrome).
+  Args: '@Doc title' picks a doc, '!<link>' tries Add, anything else is asked.
+- tests/test_ui.py rewritten (14). Fast suite 111 pass.
+
 Left:
 1. User check of the router in Streamlit (API + UI must be started; run them in your own terminals so
    Claude Code's low-memory cleanup doesn't stop them).

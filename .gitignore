@@ -6,3 +6,4 @@ __pycache__/
 data/state/
 *.log
 data/repos/
+.shots/
