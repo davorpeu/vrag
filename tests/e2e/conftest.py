@@ -2,13 +2,17 @@
 
 Run with:  .venv/Scripts/python -m pytest -m e2e
 They are skipped by default (plain `pytest` runs only the fast unit tests).
-Expects the folder corpus and the semver repo to be synced (see STATE.md).
+They use the eval index (ES_INDEX=vrag-eval unless set), not the user's library (vrag-chunks).
+Build it with:  .venv/Scripts/python scripts/build_eval_index.py
 """
+
+import os
 
 import httpx
 import pytest
 from dotenv import load_dotenv
 
+os.environ.setdefault("ES_INDEX", "vrag-eval")  # before .env, which names the library index
 load_dotenv(".env")
 
 
@@ -17,6 +21,11 @@ def _up(url: str) -> bool:
         return httpx.get(url, timeout=3).status_code == 200
     except httpx.HTTPError:
         return False
+
+
+# With Langfuse stopped, every /ask waits ~6 s for the trace export to give up: switch tracing off.
+if not _up(f"{os.environ.get('LANGFUSE_HOST', 'http://localhost:3000')}/api/public/health"):
+    os.environ.setdefault("LANGFUSE_TRACING_ENABLED", "false")
 
 
 @pytest.fixture(scope="session")

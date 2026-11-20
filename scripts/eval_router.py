@@ -4,11 +4,13 @@ Usage: .venv/Scripts/python scripts/eval_router.py
 """
 
 import json
+import os
 import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
 
+os.environ.setdefault("ES_INDEX", "vrag-eval")  # eval index, not the user's library
 load_dotenv()
 
 from vrag import store  # noqa: E402

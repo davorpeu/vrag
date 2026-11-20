@@ -7,3 +7,6 @@ data/state/
 *.log
 data/repos/
 .shots/
+data/evals/
+data/models/
+agents/runs/*/llm.lock
