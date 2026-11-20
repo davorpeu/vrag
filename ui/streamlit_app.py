@@ -339,14 +339,175 @@ def _add_status() -> None:
     st.rerun()
 
 
-with st.sidebar:
-    st.subheader("Documents")
-    if docs:
-        focus = st.radio("Ask about", [ALL, *docs], format_func=_doc_label, key="doc_focus", label_visibility="collapsed")
+# -- repo activity: "what was done recently, and in which files" ------------------------------------
+
+
+def _repos() -> list[dict]:
+    try:
+        r = httpx.get(f"{API_URL}/activity/repos", timeout=10)
+        r.raise_for_status()
+        return r.json()
+    except (httpx.HTTPError, ValueError):
+        return []
+
+
+DAYS_CHOICES = [30, 90, 180, 365]
+PHASES = {"downloading": "Downloading the repository", "reading": "Reading the commit history"}
+
+
+def _activity_load(link: str, days: int) -> None:
+    job, err = _post("/activity/sync", {"url": link, "days": days}, 60)
+    if err:
+        st.session_state["act_msg"] = ("error", err)
+        return
+    st.session_state["act_job"] = {"id": job["id"], "link": link}
+    st.session_state.pop("act_msg", None)
+
+
+@st.fragment(run_every=2)
+def _activity_status() -> None:
+    info = st.session_state.get("act_job")
+    if not info:
+        msg = st.session_state.get("act_msg")
+        if msg:
+            (st.error if msg[0] == "error" else st.success)(msg[1])
+        return
+    try:
+        job = httpx.get(f"{API_URL}/activity/jobs/{info['id']}", timeout=10).json()
+    except (httpx.HTTPError, ValueError) as e:
+        st.error(f"Lost track of the loading job: {e}")
+        return
+    if job["status"] == "running":
+        if job["phase"] == "embedding" and job["total"]:
+            st.progress(min(job["done"] / job["total"], 1.0), text=f"Indexing commits: {job['done']} of {job['total']}")
+        else:
+            st.progress(0.0, text=PHASES.get(job["phase"], job["phase"]) + "...")
+        return
+    st.session_state.pop("act_job", None)
+    if job["status"] == "error":
+        st.session_state["act_msg"] = ("error", f"Loading failed: {job['error']}")
     else:
-        focus = ALL
-        st.caption("No documents yet, or the API isn't running.")
-    _add_section()
+        text = f"Loaded {job['repo']}: {job['found']} commits in the period, {job['indexed']} new"
+        text += f", {job['skipped']} already here." if job["skipped"] else "."
+        st.session_state["act_msg"] = ("ok", text)
+        st.session_state["act_pending_repo"] = job["repo"]
+    st.rerun()
+
+
+def _activity_sidebar() -> str | None:
+    """Link field + Load, the loaded repos. Returns the chosen repo key."""
+    st.subheader("Repositories")
+    busy = "act_job" in st.session_state
+    link = st.text_input(
+        "Repository link", key="act_link", label_visibility="collapsed", placeholder="Paste a GitHub repository link"
+    )
+    days = st.selectbox("History to load", DAYS_CHOICES, index=1, format_func=lambda d: f"Last {d} days", key="act_days")
+    if st.button("Load", type="primary", disabled=busy or not link, key="act_load"):
+        _activity_load(link, days)
+        st.rerun()
+    if not busy:
+        st.caption("Loads the commits (messages and changed files) so you can ask what was done.")
+    _activity_status()
+    repos = _repos()
+    if not repos:
+        st.caption("No repositories loaded yet, or the API isn't running.")
+        return None
+    keys = [r["repo"] for r in repos]
+    if "act_pending_repo" in st.session_state:
+        st.session_state["act_repo"] = st.session_state.pop("act_pending_repo")
+    if st.session_state.get("act_repo") not in keys:
+        st.session_state["act_repo"] = keys[0]
+    by_key = {r["repo"]: r for r in repos}
+    return st.radio(
+        "Ask about", keys, key="act_repo", label_visibility="collapsed",
+        format_func=lambda k: f"{k}  \n:gray[{by_key[k]['commits']} commits since {by_key[k]['since']}]",
+    )
+
+
+def render_activity(res: dict) -> None:
+    w = res["window"]
+    line = f"<b>{_esc(res['repo'])}</b>, {_esc(w['label'])}: {res['commits_in_window']} commits"
+    if res["commits_used"] != res["commits_in_window"]:
+        line += f" ({res['commits_used']} used)"
+    line += f", {res['authors']} author{'s' if res['authors'] != 1 else ''}"
+    st.markdown(f'<p class="vr-context">{line}</p>', unsafe_allow_html=True)
+    st.markdown(res["answer"])
+    for n in res.get("notes") or []:
+        st.caption(n)
+    if res["files"]:
+        shown = len(res["files"])
+        with st.expander(f"Files changed ({shown} of {res['files_total']})", expanded=True):
+            st.dataframe(
+                [{"path": f["path"], "commits": f["commits"], "+": f["additions"], "-": f["deletions"]} for f in res["files"]],
+                hide_index=True, use_container_width=True,
+            )
+            if res["directories"]:
+                st.caption("Directories: " + ", ".join(f"{d['path']} ({d['commits']})" for d in res["directories"][:8]))
+    if res["commits"]:
+        with st.expander(f"Commits ({len(res['commits'])} of {res['commits_used']})"):
+            cited = {c["sha"] for c in res["citations"]}
+            for c in res["commits"]:
+                sha = f"[`{c['short']}`]({c['url']})" if c["url"] else f"`{c['short']}`"
+                mark = " ◂ cited" if c["sha"] in cited else ""
+                st.markdown(
+                    f"{sha} {c['date'][:10]} · {c['author']} · {c['message']} "
+                    f":gray[({c['files_changed']} files, +{c['additions']} -{c['deletions']})]{mark}"
+                )
+
+
+def _activity_main(repo: str | None) -> None:
+    st.title("Repo activity")
+    hist: list[dict] = st.session_state.setdefault("act_history", [])
+    q = st.chat_input(f"Ask about {repo}" if repo else "Load a repository first", disabled=repo is None, key="act_input")
+    if not hist and not q:
+        st.markdown(
+            '<p class="vr-empty">Load a repository on the left, then ask what was done in it. For example:</p>'
+            '<ul class="vr-examples"><li>Describe what has been done recently and in which files</li>'
+            "<li>What changed last week?</li><li>What happened since March in the tests?</li></ul>",
+            unsafe_allow_html=True,
+        )
+    for turn in hist:
+        if turn["repo"] != repo:
+            continue
+        with st.chat_message("user", avatar=USER):
+            st.markdown(turn["question"])
+        with st.chat_message("assistant", avatar=BOT):
+            if turn.get("error"):
+                st.error(turn["error"])
+            else:
+                render_activity(turn["response"])
+    if q and repo:
+        with st.chat_message("user", avatar=USER):
+            st.markdown(q)
+        with st.chat_message("assistant", avatar=BOT):
+            with st.spinner("Reading the commits..."):
+                res, err = _post("/activity/ask", {"question": q, "repo": repo}, 300)
+            if err:
+                st.error(err)
+                hist.append({"repo": repo, "question": q, "error": err})
+            else:
+                render_activity(res)
+                hist.append({"repo": repo, "question": q, "response": res})
+
+
+USER, BOT = ":material/person:", ":material/description:"
+
+with st.sidebar:
+    activity_mode = st.toggle("Repo activity", key="activity_mode", help="Ask what was done recently in a repository")
+    if activity_mode:
+        repo_focus = _activity_sidebar()
+    else:
+        st.subheader("Documents")
+        if docs:
+            focus = st.radio("Ask about", [ALL, *docs], format_func=_doc_label, key="doc_focus", label_visibility="collapsed")
+        else:
+            focus = ALL
+            st.caption("No documents yet, or the API isn't running.")
+        _add_section()
+
+if activity_mode:
+    _activity_main(repo_focus)
+    st.stop()
 
 
 # -- main: the conversation -----------------------------------------------------------
@@ -355,7 +516,6 @@ st.title("versioned-rag")
 history: list[dict] = st.session_state.setdefault("history", [])
 target = docs[focus]["doc_title"] if focus != ALL else None
 question = st.chat_input(f"Ask about {target}" if target else "Ask a question")  # pinned to the bottom
-USER, BOT = ":material/person:", ":material/description:"
 
 if not history and not question:
     st.markdown(

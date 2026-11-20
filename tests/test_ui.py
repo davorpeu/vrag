@@ -55,9 +55,12 @@ UNCLEAR_DOC = {**UNCLEAR_VERSION, "route": {"intent": "unclear", "doc_id": None,
 class FakeApi:
     """Records calls; answers /ask with `answer`, git endpoints from the given states."""
 
-    def __init__(self, monkeypatch, answer=COMPARE, inspect=None, inspect_code=200, preview=None, jobs=(), docs=DOCS):
+    def __init__(self, monkeypatch, answer=COMPARE, inspect=None, inspect_code=200, preview=None, jobs=(), docs=DOCS,
+                 repos=(), activity_answer=None, activity_code=200, activity_jobs=(), sync_code=202):
         self.calls, self.answer, self.inspect, self.inspect_code = [], answer, inspect, inspect_code
         self.preview, self.jobs, self.docs = preview, iter(jobs), docs
+        self.repos, self.activity_answer, self.activity_code = list(repos), activity_answer, activity_code
+        self.activity_jobs, self.sync_code = iter(activity_jobs), sync_code
         monkeypatch.setattr(httpx, "post", self.post)
         monkeypatch.setattr(httpx, "get", self.get)
 
@@ -66,6 +69,10 @@ class FakeApi:
 
     def post(self, url, json, timeout):
         self.calls.append((url.rsplit("8000", 1)[-1], json))
+        if url.endswith("/activity/ask"):
+            return self._r(self.activity_code, self.activity_answer, url)
+        if url.endswith("/activity/sync"):
+            return self._r(self.sync_code, {"id": "ajob1"} if self.sync_code == 202 else {"detail": "busy"}, url)
         if url.endswith("/ask"):
             return self._r(200, self.answer, url)
         if url.endswith("/inspect"):
@@ -80,6 +87,10 @@ class FakeApi:
     def get(self, url, timeout):
         if url.endswith("/documents"):
             return self._r(200, self.docs, url)
+        if url.endswith("/activity/repos"):
+            return self._r(200, self.repos, url)
+        if "/activity/jobs/" in url:
+            return self._r(200, next(self.activity_jobs), url)
         return self._r(200, next(self.jobs), url)
 
     def sent(self, path):
@@ -246,3 +257,128 @@ def test_failed_load_is_reported(monkeypatch):
     FakeApi(monkeypatch, inspect=INSPECT_FILE, jobs=[job("error", error="ConnectionError: elasticsearch down")])
     at = add(app(), "https://github.com/semver/semver/blob/master/semver.md")
     assert any("elasticsearch down" in e.value for e in at.sidebar.error)
+
+
+# -- repo activity ---------------------------------------------------------------------------
+
+REPOS = [
+    {"repo": "tiangolo/fastapi", "url": "https://github.com/tiangolo/fastapi", "since": "2026-08-22",
+     "synced_at": "2026-11-20T10:00:00Z", "commits": 240},
+    {"repo": "ollama/ollama", "url": "https://github.com/ollama/ollama", "since": "2026-08-22",
+     "synced_at": "2026-11-20T10:00:00Z", "commits": 80},
+]
+SHA1, SHA2 = "a" * 40, "b" * 40
+ACTIVITY = {
+    "repo": "tiangolo/fastapi", "question": "what was done recently?",
+    "answer": "Docs and the parser were reworked. (aaaaaaa)\n\nMost changed files (commits touching them): docs/a.md (3).",
+    "window": {"since": "2026-11-06", "until": "2026-11-20", "last_n": None, "label": "last 14 days (recently)"},
+    "topic": "", "commits_in_window": 12, "commits_used": 12, "authors": 3,
+    "first_commit": "2026-11-07", "last_commit": "2026-11-19",
+    "files": [{"path": "docs/a.md", "commits": 3, "additions": 10, "deletions": 2},
+              {"path": "fastapi/routing.py", "commits": 2, "additions": 40, "deletions": 5}],
+    "files_total": 9, "directories": [{"path": "docs/", "commits": 4, "additions": 12, "deletions": 3}],
+    "commits": [
+        {"sha": SHA1, "short": "aaaaaaa", "date": "2026-11-19T10:00:00Z", "author": "Ann", "message": "Rework docs",
+         "url": f"https://github.com/tiangolo/fastapi/commit/{SHA1}", "files_changed": 3, "additions": 10, "deletions": 2},
+        {"sha": SHA2, "short": "bbbbbbb", "date": "2026-11-18T10:00:00Z", "author": "Bob", "message": "Fix routing",
+         "url": None, "files_changed": 1, "additions": 40, "deletions": 5},
+    ],
+    "citations": [{"sha": SHA1, "short": "aaaaaaa", "url": f"https://github.com/tiangolo/fastapi/commit/{SHA1}", "message": "Rework docs"}],
+    "insufficient_context": False, "notes": ["The question names a topic (docs): showing the 5 commits most related to it."],
+}
+
+
+def aloaded(**kw):
+    return {"id": "ajob1", "status": "running", "phase": "downloading", "done": 0, "total": 0, "error": None,
+            "repo": None, "action": None, "found": 0, "indexed": 0, "skipped": 0, **kw}
+
+
+def activity_app(monkeypatch, **kw):
+    api = FakeApi(monkeypatch, repos=REPOS, activity_answer=ACTIVITY, **kw)
+    at = app()
+    at.sidebar.toggle[0].set_value(True).run()
+    assert not at.exception
+    return api, at
+
+
+def test_documents_ui_is_the_default_and_the_toggle_switches(monkeypatch):
+    FakeApi(monkeypatch, repos=REPOS)
+    at = app()
+    assert at.sidebar.toggle[0].value is False and at.sidebar.radio[0].options[0] == "All documents"
+    at.sidebar.toggle[0].set_value(True).run()
+    assert at.title[0].value == "Repo activity" and [o.split("  ")[0] for o in at.sidebar.radio[0].options] == ["tiangolo/fastapi", "ollama/ollama"]
+    at.sidebar.toggle[0].set_value(False).run()
+    assert at.title[0].value == "versioned-rag" and at.sidebar.radio[0].options[0] == "All documents"
+
+
+def test_activity_answer_shows_text_files_table_and_commit_links(monkeypatch):
+    api, at = activity_app(monkeypatch)
+    assert at.chat_input[0].placeholder == "Ask about tiangolo/fastapi"
+    ask(at, "what was done recently?")
+    assert api.sent("/activity/ask") == [{"question": "what was done recently?", "repo": "tiangolo/fastapi"}]
+    page = html(at)
+    assert "last 14 days (recently)" in page and "12 commits" in page and "3 authors" in page
+    assert "Docs and the parser were reworked" in page
+    table = at.dataframe[0].value  # path, commits, +, -
+    assert list(table.columns) == ["path", "commits", "+", "-"] and table.iloc[0].tolist() == ["docs/a.md", 3, 10, 2]
+    labels = [e.label for e in at.main.expander]
+    assert labels == ["Files changed (2 of 9)", "Commits (2 of 12)"]
+    commits = " ".join(m.value for m in at.main.expander[1].markdown)
+    assert f"[`aaaaaaa`](https://github.com/tiangolo/fastapi/commit/{SHA1})" in commits and "◂ cited" in commits
+    assert "`bbbbbbb`" in commits and "(https://" not in commits.split("bbbbbbb")[1]  # no link without a URL
+    assert "names a topic" in " ".join(c.value for c in at.caption)
+
+
+def test_activity_question_goes_to_the_picked_repo(monkeypatch):
+    api, at = activity_app(monkeypatch)
+    at.sidebar.radio[0].set_value("ollama/ollama").run()
+    assert at.chat_input[0].placeholder == "Ask about ollama/ollama"
+    ask(at, "what changed last week?")
+    assert api.sent("/activity/ask")[-1]["repo"] == "ollama/ollama"
+    assert not api.sent("/ask")  # the document pipeline is not used
+
+
+def test_activity_error_is_shown_in_the_chat(monkeypatch):
+    api = FakeApi(monkeypatch, repos=REPOS, activity_answer={"detail": "'x' is not loaded yet."}, activity_code=400)
+    at = app()
+    at.sidebar.toggle[0].set_value(True).run()
+    ask(at, "q")
+    assert "not loaded yet" in at.error[0].value
+
+
+def test_activity_load_polls_progress_then_selects_the_repo(monkeypatch):
+    api, at = activity_app(monkeypatch, activity_jobs=[
+        aloaded(phase="reading"),
+        aloaded(phase="embedding", done=30, total=60),
+        aloaded(status="done", repo="ollama/ollama", action="cloned", found=80, indexed=75, skipped=5),
+    ])
+    at.sidebar.text_input[0].input("https://github.com/ollama/ollama").run()
+    [b for b in at.sidebar.button if b.label == "Load"][0].click().run()
+    assert api.sent("/activity/sync") == [{"url": "https://github.com/ollama/ollama", "days": 90}]
+    assert "Reading the commit history" in at.sidebar.get("progress")[0].proto.text
+    at.run()
+    assert "Indexing commits: 30 of 60" in at.sidebar.get("progress")[0].proto.text
+    at.run()  # done
+    assert any("Loaded ollama/ollama: 80 commits in the period, 75 new, 5 already here." in s.value for s in at.sidebar.success)
+    assert at.sidebar.radio[0].value == "ollama/ollama"
+
+
+def test_activity_load_failure_and_busy_are_reported(monkeypatch):
+    api, at = activity_app(monkeypatch, activity_jobs=[aloaded(status="error", error="ActivityError: repository not found")])
+    at.sidebar.text_input[0].input("https://github.com/x/nope").run()
+    [b for b in at.sidebar.button if b.label == "Load"][0].click().run()
+    at.run()
+    assert any("repository not found" in e.value for e in at.sidebar.error)
+
+    api, at = activity_app(monkeypatch, sync_code=409)
+    at.sidebar.text_input[0].input("https://github.com/x/y").run()
+    [b for b in at.sidebar.button if b.label == "Load"][0].click().run()
+    assert any("busy" in e.value for e in at.sidebar.error)
+
+
+def test_activity_with_no_repos_loaded_asks_to_load_one(monkeypatch):
+    FakeApi(monkeypatch, repos=[])
+    at = app()
+    at.sidebar.toggle[0].set_value(True).run()
+    assert at.chat_input[0].disabled and "No repositories loaded yet" in " ".join(c.value for c in at.sidebar.caption)
+    assert [b for b in at.sidebar.button if b.label == "Load"][0].disabled
