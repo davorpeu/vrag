@@ -161,6 +161,32 @@ services:
       interval: 3s
       retries: 10
 
+  # Document store for the "s3" VersionSource: a bucket with versioning on, where every object version
+  # is a document version (seeded by scripts/seed_minio.py). Separate from langfuse-minio so app data
+  # and tracing data never mix. Small memory settings: this PC is tight on RAM. MinIO sizes its
+  # request buffers from the container memory limit; GOMEMLIMIT makes Go collect garbage before the
+  # limit is reached. Data lives in the named volume (inside Docker's disk image, on E: here).
+  docs-minio:
+    image: cgr.dev/chainguard/minio
+    restart: unless-stopped
+    entrypoint: sh
+    command: -c 'exec minio server --address ":9000" --console-address ":9001" /data'
+    environment:
+      MINIO_ROOT_USER: vrag
+      MINIO_ROOT_PASSWORD: vrag-minio-secret
+      MINIO_API_REQUESTS_MAX: "16"
+      MINIO_SCANNER_SPEED: slowest
+      GOMEMLIMIT: 160MiB
+      GOGC: "50"
+    mem_limit: 256m
+    ports: ["127.0.0.1:9100:9000", "127.0.0.1:9101:9001"]
+    volumes: [docs_minio_data:/data]
+    healthcheck:
+      # image ships no mc/curl; sh is bash, so probe the port directly
+      test: ["CMD", "sh", "-c", "exec 3<>/dev/tcp/127.0.0.1/9000"]
+      interval: 2s
+      retries: 15
+
 volumes:
   es_data:
   clickhouse_data:
@@ -168,3 +194,4 @@ volumes:
   langfuse_minio_data:
   postgres_data:
   docs_db_data:
+  docs_minio_data:
