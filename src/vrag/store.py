@@ -10,6 +10,7 @@ from functools import lru_cache
 from elasticsearch import Elasticsearch, helpers
 from langchain_ollama import OllamaEmbeddings
 
+from vrag import rerank as reranking
 from vrag.config import get_settings
 from vrag.models import Chunk
 
@@ -150,6 +151,27 @@ def refresh_latest(doc_id: str) -> None:
     )
 
 
+# Search filters, built in one place so the app (answer.py) and the evals search the same way.
+
+
+def latest_filters(doc_id: str | None = None) -> list[dict]:
+    """The latest version of every document, or of one document."""
+    filters: list[dict] = [{"term": {"is_latest": True}}]
+    if doc_id:
+        filters.append({"term": {"doc_id": doc_id}})
+    return filters
+
+
+def version_filters(doc_id: str, version: str) -> list[dict]:
+    """One version of one document."""
+    return [{"term": {"doc_id": doc_id}}, {"term": {"version": version}}]
+
+
+def compare_filters(doc_id: str, versions: list[str]) -> list[dict]:
+    """Several versions of one document (the compare pipeline ranks changes with it)."""
+    return [{"term": {"doc_id": doc_id}}, {"terms": {"version": list(versions)}}]
+
+
 def _rrf(rankings: list[list[str]], k: int) -> list[str]:
     scores: dict[str, float] = {}
     for ranking in rankings:
@@ -158,35 +180,52 @@ def _rrf(rankings: list[list[str]], k: int) -> list[str]:
     return sorted(scores, key=scores.get, reverse=True)
 
 
-def hybrid_search(question: str, filters: list[dict] | None = None, top_k: int | None = None) -> list[dict]:
+def bm25_hits(question: str, filters: list[dict], size: int | None = None) -> list[dict]:
+    """Keyword search (BM25) within the filters: ES hits, best first."""
     s = get_settings()
-    top_k = top_k or s.top_k
-    filters = filters or [{"term": {"is_latest": True}}]
-    src = {"excludes": ["embedding"]}
-
-    bm25 = es().search(
+    return es().search(
         index=s.es_index,
-        size=s.candidates,
+        size=size or s.candidates,
         query={
             "bool": {
                 "must": {"multi_match": {"query": question, "fields": ["text", "section_title^2", "doc_title^2"]}},
                 "filter": filters,
             }
         },
-        source=src,
+        source={"excludes": ["embedding"]},
     )["hits"]["hits"]
 
+
+def knn_hits(question: str, filters: list[dict], size: int | None = None) -> list[dict]:
+    """Vector search (query embedding, cosine) within the filters: ES hits, best first."""
+    s = get_settings()
+    size = size or s.candidates
     qvec = embedder().embed_query(f"{QUERY_PREFIX}{question}")
-    knn = es().search(
+    return es().search(
         index=s.es_index,
-        size=s.candidates,
-        knn={"field": "embedding", "query_vector": qvec, "k": s.candidates, "num_candidates": 100, "filter": filters},
-        source=src,
+        size=size,
+        knn={"field": "embedding", "query_vector": qvec, "k": size, "num_candidates": max(100, size), "filter": filters},
+        source={"excludes": ["embedding"]},
     )["hits"]["hits"]
 
+
+def hybrid_search(
+    question: str, filters: list[dict] | None = None, top_k: int | None = None, rerank: bool | None = None
+) -> list[dict]:
+    """BM25 + kNN fused with RRF. With reranking on, a cross-encoder then reorders the top
+    settings.rerank_candidates fused hits (the rest keep the RRF order). Returns the top_k chunks.
+
+    rerank: None follows settings.rerank; True/False overrides it for this call.
+    If the reranker is unavailable the RRF order is returned (rerank.py never raises)."""
+    s = get_settings()
+    filters = filters or latest_filters()
+    bm25, knn = bm25_hits(question, filters), knn_hits(question, filters)
     by_id = {h["_id"]: h["_source"] for h in bm25 + knn}
-    fused = _rrf([[h["_id"] for h in bm25], [h["_id"] for h in knn]], s.rrf_k)
-    return [by_id[i] for i in fused[:top_k]]
+    fused = [by_id[i] for i in _rrf([[h["_id"] for h in bm25], [h["_id"] for h in knn]], s.rrf_k)]
+    if s.rerank if rerank is None else rerank:
+        head = fused[: s.rerank_candidates]
+        fused = reranking.get(s.rerank_model, s.models_dir).rerank(question, head) + fused[len(head) :]
+    return fused[: top_k or s.top_k]
 
 
 def catalog() -> list[dict]:

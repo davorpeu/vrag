@@ -321,7 +321,7 @@ def route_question(question: str, focus: str | None = None) -> router.Route:
 @observe(name="answer-latest")
 def answer_latest(question: str, route: router.Route) -> AskResponse:
     if route.doc_id:  # user picked a document
-        filters = [{"term": {"is_latest": True}}, {"term": {"doc_id": route.doc_id}}]
+        filters = store.latest_filters(route.doc_id)
         scope = "Sources are from the latest version of the document the user selected."
     else:
         filters, scope = None, "Sources are from the latest version of each document."
@@ -335,7 +335,7 @@ def answer_latest(question: str, route: router.Route) -> AskResponse:
 @observe(name="answer-version")
 def answer_version(question: str, route: router.Route) -> AskResponse:
     version = route.versions[0]
-    filters = [{"term": {"doc_id": route.doc_id}}, {"term": {"version": version}}]
+    filters = store.version_filters(route.doc_id, version)
     hits = store.hybrid_search(question, filters=filters)
     context, labelled = format_context(hits)
     title = hits[0]["doc_title"] if hits else route.doc_id
@@ -375,7 +375,7 @@ def answer_compare(question: str, route: router.Route) -> AskResponse:
 
     if len(changes) > MAX_CHANGES:
         # keep the changes in the sections most relevant to the question, in document order
-        filters = [{"term": {"doc_id": route.doc_id}}, {"terms": {"version": [old_v, new_v]}}]
+        filters = store.compare_filters(route.doc_id, [old_v, new_v])
         ranked = [h["chunk_id"] for h in store.hybrid_search(question, filters=filters, top_k=40)]
         rank = {cid: i for i, cid in enumerate(ranked)}
 
