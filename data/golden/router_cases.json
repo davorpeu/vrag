@@ -23,7 +23,7 @@
   {"q": "What changed between v1.0 and v2.0 of the travel policy?", "intent": "compare", "doc": "travel-expense-policy", "versions": ["v1.0", "v2.0"]},
   {"q": "what has changed in forbiding agents from doing", "intent": "unclear"},
   {"q": "What has changed in forbidding agents from doing?", "intent": "unclear"},
-  {"q": "What changed in the React CLAUDE.md?", "intent": "compare", "doc": "react/CLAUDE", "versions": ["a0566250", "03e77555"]},
+  {"q": "What changed in the latest data retention standard?", "intent": "compare", "doc": "data-retention", "versions": ["v2", "v3"]},
   {"q": "How long do I have to report a security incident in the current IT security policy?", "intent": "latest", "doc": "it-security-policy"},
   {"q": "What was the minimum password length in v1.0 of the IT security policy?", "intent": "version", "doc": "it-security-policy", "versions": ["v1.0"]},
   {"q": "What changed between v1.1 and v2.0 of the IT security policy?", "intent": "compare", "doc": "it-security-policy", "versions": ["v1.1", "v2.0"]}

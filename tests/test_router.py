@@ -70,9 +70,36 @@ def test_version_doc_inferred_from_unique_version():
     assert (r.doc_id, r.versions) == ("semver/semver", ["v1.0.0-beta"])
 
 
-def test_version_shared_label_uses_search():
+def test_version_shared_label_unnamed_doc_is_unclear():
+    # v1 exists in refund, leave and semver; the question names none -> ask, no search guess
     r = run("What did v1 say about carry-over?", D("version", None, ["v1"]), top="leave-policy")
-    assert (r.doc_id, r.versions) == ("leave-policy", ["v1"])
+    assert r.intent == "unclear" and r.doc_id is None
+    assert "Several documents have version v1" in r.note and "Indexed:" in r.note
+
+
+def test_version_shared_label_doc_named_in_question():
+    r = run("What did v1 of the leave policy say?", D("version", None, ["v1"]), top="refund-policy")
+    assert (r.intent, r.doc_id, r.versions) == ("version", "leave-policy", ["v1"])
+
+
+def test_compare_shared_version_no_doc_is_unclear():
+    r = run("What changed in version 2?", D("compare", "refund-policy", ["v2"]), top="refund-policy")
+    assert r.intent == "unclear" and r.doc_id is None and "Indexed:" in r.note
+
+
+def test_general_question_without_doc_is_latest():
+    r = run("Can the numbers in a version have leading zeroes?", D("unclear"), top="semver/semver")
+    assert r.intent == "latest"
+
+
+def test_offtopic_question_without_doc_is_latest():
+    r = run("How do I reset my laptop password?", D("unclear"))
+    assert r.intent == "latest"
+
+
+@pytest.mark.parametrize("q", ["What about the other one?", "And that?", "what changed?", "Is it the same as before?"])
+def test_vague_or_follow_up_question_stays_unclear(q):
+    assert run(q, D("unclear")).intent == "unclear"
 
 
 def test_missing_version_is_unclear():
@@ -106,7 +133,7 @@ def test_compare_two_versions_sorted_old_to_new():
 
 
 def test_compare_one_version_uses_previous():
-    assert run("What changed in v2?", D("compare", "refund-policy", ["v2"])).versions == ["v1", "v2"]
+    assert run("What changed in v2 of the refund policy?", D("compare", "refund-policy", ["v2"])).versions == ["v1", "v2"]
 
 
 def test_compare_no_version_uses_last_two():
@@ -114,7 +141,7 @@ def test_compare_no_version_uses_last_two():
 
 
 def test_version_with_two_versions_becomes_compare():
-    r = run("What did v1 and v2 say?", D("version", "refund-policy", ["v1", "v2"]))
+    r = run("What did v1 and v2 of the refund policy say?", D("version", "refund-policy", ["v1", "v2"]))
     assert (r.intent, r.versions) == ("compare", ["v1", "v2"])
 
 

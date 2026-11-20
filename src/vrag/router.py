@@ -176,6 +176,19 @@ def named_in(question: str, doc: dict) -> bool:
     return False
 
 
+_FOLLOW_UP = re.compile(
+    r"\b(other|another|that|this|those|these|it|them|same|again|previous|prior|old|older|earlier|"
+    r"change[sd]?|changing|new|differ\w*|difference\w*|compare[sd]?|between|latest)\b",
+    re.I,
+)
+
+
+def _is_general_question(question: str) -> bool:
+    """A self-contained question ('Can version numbers have leading zeroes?'): at least 4 words, and no word
+    that points at something unseen ('the other one', 'that') or asks about changes (needs a doc)."""
+    return len(re.findall(r"[A-Za-z']+", question)) >= 4 and not _FOLLOW_UP.search(question)
+
+
 def _which_doc(catalog: list[dict]) -> str:
     names = "; ".join(f"{d['doc_title']} ({d['doc_id']})" for d in catalog)
     return f"Name the document in your question. Indexed: {names}."
@@ -244,11 +257,26 @@ def _resolve(
         if len(candidates) == 1:
             doc = candidates[0]
         elif candidates:
-            doc = _find_doc(top_doc([d["doc_id"] for d in candidates]), catalog)
+            # several docs have this version: only a doc the question names settles it; a search guess does not
+            named = [d for d in candidates if named_in(question, d)]
+            if len(named) == 1:
+                doc = named[0]
+            else:
+                return Route(
+                    "unclear",
+                    note=f"Several documents have version {', '.join(mentions)}: "
+                    + ", ".join(d["doc_title"] for d in candidates)
+                    + ". "
+                    + _which_doc(catalog),
+                )
     if doc is None and intent != "latest":
         searched = _find_doc(top_doc(None), catalog)
         if searched and (searched is llm_doc or named_in(question, searched)):
             doc = searched
+
+    if intent == "unclear" and doc is None and not mentions and not decision.as_of and _is_general_question(question):
+        # a plain question with no doc, version or date: search picks the document; off-topic is refused later
+        return Route("latest", note="Latest version of each document.")
 
     if intent == "unclear":
         hint = f" {_available(doc)}." if doc else " " + _which_doc(catalog)
