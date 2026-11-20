@@ -140,3 +140,21 @@ Left:
 1. User check of the router in Streamlit (API + UI must be started; run them in your own terminals so
    Claude Code's low-memory cleanup doesn't stop them).
 2. More sources: MinIO.
+
+## Run 2026-11-20 (branch run-2026-11-20) - W1-W3 finished and verified
+- Eval index `vrag-eval` (scripts/build_eval_index.py): folder corpus, semver tags, docs-db, S3. e2e tests and
+  scripts/eval_*.py use it by default; the library `vrag-chunks` is never written by evals.
+- S3 source (sources/s3.py): object versions = document versions (or `--layout folders`). docs-minio on
+  127.0.0.1:9100. `scripts/seed_minio.py` then `vrag sync s3`. Seeded doc it-security-policy v1.0/v1.1/v2.0.
+- Reranker (rerank.py, fastembed cross-encoder, model in data/models): RERANK=false by default (+0.8 GB RAM,
+  ~1.5 s/search). scripts/eval_retrieval.py, 89 cases: hybrid MRR 0.803, +rerank 0.927, kNN-only 0.898.
+- Answer eval (evals.py, scripts/eval_answers.py, data/golden/answer_cases.json, 37 cases): 33/37.
+- Checks: fast suite 168 pass; eval_diff all pairs OK (incl. it-security-policy); eval_router 27/28
+  (the fail is a react/CLAUDE case: that doc is not in vrag-eval -> fix the case); S3 live e2e 2 pass 1 skip.
+
+Next (queue, see agents/runs/2026-11-20/BOARD.md):
+1. Q4 fixes from the answer eval: router.py (several docs have the version -> ask; general question with no doc
+   -> latest), answer.py mentions_change (missed "Also changed"). Re-run with --failed-from then --repeat 3.
+2. Q8 fusion: kNN-only beats hybrid on retrieval (R@6 0.978 vs 0.899): weighted RRF.
+3. Fix/remove the react/CLAUDE router case. Q1 review, Q2 num_ctx + compact catalog, Q3 S3 in API+UI,
+   Q5 history questions, Q6 upload version, Q7 README, L2 react fix in vrag-chunks, user router check in UI.

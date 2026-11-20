@@ -22,7 +22,7 @@ scripts/seed_db.py, scripts/eval_router.py, scripts/eval_diff.py, tests/e2e/conf
 Q1 code review, Q2 num_ctx + compact router catalog, Q3 S3 in API+UI, Q4 fixes from W3 eval,
 Q5 history questions, Q6 upload version from UI, Q7 README, L2 react fix in vrag-chunks, L3 user router check.
 
-## Done
+## Done (all committed on run-2026-11-20)
 - W1 S3 source (report reports/W1.md). Lead verified: test_s3_source 14 pass. Lead applied request:
   S3Source added to scripts/build_eval_index.py. PENDING (after W2+W3 finish, they read vrag-eval now):
   `docker compose up -d docs-minio`, seed_minio.py, build_eval_index.py, eval_diff (expect 10/10),
@@ -30,3 +30,5 @@ Q5 history questions, Q6 upload version from UI, Q7 README, L2 react fix in vrag
 - W2 rerank (reports/W2.md). Lead verified: fast suite 168 pass. RERANK=false default (+0.8 GB RAM, ~1.5 s/search).
   Rerank: MRR 0.803 -> 0.927. Finding: kNN-only beats current hybrid (R@6 0.978 vs 0.899) -> new queue item
   Q8 weighted RRF / kNN-heavier fusion. answer.py changed during W3's eval run (behaviour same with rerank off).
+- W3 answer eval (reports/W3.md): 33/37; failures -> Q4 (router.py x3, answer.py x1).
+- L1 lead: S3 synced into vrag-eval; eval_diff OK; eval_router 27/28 (react/CLAUDE case not in vrag-eval); S3 live e2e pass.
