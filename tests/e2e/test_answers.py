@@ -1,135 +1,31 @@
-"""Ask real questions through the API and check route, versions, facts and citations.
+"""Ask the golden questions (data/golden/answer_cases.json) through the real API and check each answer.
 
-Each case says what a correct answer must contain. On top of that every answer must:
-- cite only versions the route chose (latest route: each doc's latest version),
-- cite nothing the model invented (no unknown citations),
-- quote text that really appears in the cited chunk (groundedness).
+The cases and the checks live in vrag.evals (the same ones scripts/eval_answers.py uses): route,
+versions, facts, forbidden facts, grounding status, citations only from the routed versions, no
+unknown citations, both sides cited in a comparison, and quotes found verbatim in the cited chunk.
 """
 
-import re
+from pathlib import Path
 
 import pytest
 
+from vrag import evals
+
 pytestmark = pytest.mark.e2e
 
-# id, question, intent, doc, versions, facts (regexes the answer must match), extra checks
-CASES = [
-    # latest
-    ("latest-refund", "How many days do customers have to request a refund?",
-     "latest", "refund-policy", None, [r"\b21\b"], {}),
-    ("latest-audit-logs", "How long are security audit logs kept?",
-     "latest", "data-retention", None, [r"\b2 years\b|two years"], {}),
-    ("latest-semver", "When must I increment the major version in semantic versioning?",
-     "latest", "semver/semver", None, [r"incompatible"], {}),
-    ("latest-not-covered", "What is the company's dress code?",
-     "latest", None, None, [], {"insufficient": True}),
-    # specific version
-    ("version-label", "What was the refund window in version 2 of the refund policy?",
-     "version", "refund-policy", ["v2"], [r"\b14\b"], {}),
-    ("version-date", "What was the refund window in March 2024?",
-     "version", "refund-policy", ["v1"], [r"\b30\b"], {}),
-    ("version-old", "What did the old refund policy say about restocking fees?",
-     "version", "refund-policy", ["v2"], [r"15\s?%"], {}),
-    ("version-previous", "What did the previous version of the data retention standard say about account data?",
-     "version", "data-retention", ["v2"], [r"\b7 years\b|seven years"], {}),
-    ("version-leave-v1", "What did the leave policy v1 say about parental leave for secondary caregivers?",
-     "version", "leave-policy", ["v1"], [r"\b2 weeks\b|two weeks"], {}),
-    ("version-semver", "What did semver 1.0.0 say about pre-release versions?",
-     "version", "semver/semver", ["v1.0.0"], [r"dash"], {}),
-    # compare
-    ("compare-two-labels", "What changed between v1 and v3 of the refund policy?",
-     "compare", "refund-policy", ["v1", "v3"], [r"\b30\b", r"\b21\b"], {}),
-    ("compare-whats-new", "What is new in the latest leave policy?",
-     "compare", "leave-policy", ["v2", "v3"], [r"\b10\b", r"\b5\b", r"remote"], {}),
-    ("compare-focused", "How did the restocking fee rules change in v2 of the refund policy?",
-     "compare", "refund-policy", ["v1", "v2"], [r"15\s?%", r"defective"], {"only_sections": ["Restocking"]}),
-    ("compare-semver", "What changed in semver 2.0.0 compared to 1.0.0?",
-     "compare", "semver/semver", ["v1.0.0", "v2.0.0"], [r"build metadata"], {}),
-    # Postgres source (travel-expense-policy exists only in docs-db)
-    ("db-latest-meals", "What is the daily meal allowance on business trips?",
-     "latest", "travel-expense-policy", None, [r"\b60\b"], {}),
-    ("db-latest-hotel", "How much is reimbursed per hotel night?",
-     "latest", "travel-expense-policy", None, [r"\b180\b"], {}),
-    ("db-version-label", "What was the hotel limit in v1.0 of the travel policy?",
-     "version", "travel-expense-policy", ["v1.0"], [r"\b150\b"], {}),
-    ("db-version-date", "How many days did I have to submit expense claims in March 2024?",
-     "version", "travel-expense-policy", ["v1.0"], [r"\b30\b"], {}),
-    ("db-compare", "What changed in version 2.0 of the travel and expense policy?",
-     "compare", "travel-expense-policy", ["v1.1", "v2.0"], [r"\b8\b", r"\b180\b", r"rail"], {}),
-    # unclear
-    ("unclear-missing-version", "What did version 7 of the refund policy say?",
-     "unclear", "refund-policy", [], [r"v1, v2, v3"], {}),
-]
+CASES = evals.load_cases(Path(__file__).parents[2] / "data" / "golden" / "answer_cases.json")
 
 
-def _norm(s: str) -> str:
-    return re.sub(r"\s+", " ", s).strip().lower()
+@pytest.mark.parametrize("case", CASES, ids=[c.id for c in CASES])
+def test_answer(case, client, catalog, chunk_text):
+    r = client.post("/ask", json={"question": case.question, "doc_id": case.doc_id})
+    assert r.status_code == 200, r.text
+    res = r.json()
 
-
-@pytest.fixture(scope="module")
-def answers(client):
-    cache = {}
-
-    def ask(q: str) -> dict:
-        if q not in cache:
-            r = client.post("/ask", json={"question": q})
-            assert r.status_code == 200, r.text
-            cache[q] = r.json()
-        return cache[q]
-
-    return ask
-
-
-@pytest.mark.parametrize("cid,q,intent,doc,versions,facts,extra", CASES, ids=[c[0] for c in CASES])
-def test_answer(cid, q, intent, doc, versions, facts, extra, answers, catalog, chunk_text):
-    res = answers(q)
-    route = res["route"]
+    latest_of = {d: v["versions"][-1]["version"] for d, v in catalog.items()}
+    checks = evals.check_answer(case, res, latest_of, chunk_text)
+    problems = evals.failures(checks)
     cited = [(c["doc_id"], c["version"], c["section"]) for c in res["citations"]]
-    shown = f"\nroute={route}\nanswer={res['answer']!r}\ncitations={cited}"
-
-    # route
-    assert route["intent"] == intent, shown
-    if versions is not None:
-        assert route["versions"] == versions, shown
-    if intent in ("version", "compare", "unclear") and doc:
-        assert route["doc_id"] == doc, shown
-
-    # groundedness check by the app itself
-    expected = "not_checked" if intent == "unclear" or extra.get("insufficient") else "grounded"
-    assert res["grounding"]["status"] == expected, f"grounding={res['grounding']}{shown}"
-
-    # facts in the answer
-    for pattern in facts:
-        assert re.search(pattern, res["answer"], re.I), f"answer lacks /{pattern}/{shown}"
-
-    if extra.get("insufficient"):
-        assert res["insufficient_context"], shown
-        return
-    if intent == "unclear":
-        assert not res["citations"], shown
-        return
-
-    # citations: present, nothing invented, from the right doc and versions
-    assert res["citations"], f"no citations{shown}"
-    assert not res["unknown_citations"], shown
-    for c in res["citations"]:
-        if doc:
-            assert c["doc_id"] == doc, shown
-        if intent == "latest":
-            latest = catalog[c["doc_id"]]["versions"][-1]["version"]
-            assert c["version"] == latest, f"cited {c['version']}, latest is {latest}{shown}"
-        else:
-            assert c["version"] in route["versions"], shown
-        if "only_sections" in extra:
-            assert any(s in c["section"] for s in extra["only_sections"]), f"off-topic citation {c['section']}{shown}"
-
-    # compare answers cite both sides
-    if intent == "compare":
-        assert {c["version"] for c in res["citations"]} == set(route["versions"]), shown
-
-    # groundedness: every quote is really in the cited chunk
-    for c in res["citations"]:
-        quote = _norm(c["quote"]).removesuffix("...").strip()
-        assert quote and quote in _norm(chunk_text(c["chunk_id"])), (
-            f"quote not found in {c['chunk_id']}: {c['quote']!r}{shown}"
-        )
+    assert not problems, (
+        "\n".join(problems) + f"\nroute={res['route']}\nanswer={res['answer']!r}\ncitations={cited}"
+    )

@@ -1,0 +1,682 @@
+[
+ {
+  "id": "latest-refund-window",
+  "question": "How many days do customers have to request a refund?",
+  "intent": "latest",
+  "doc": "refund-policy",
+  "versions": null,
+  "facts": [
+   "\\b21\\b"
+  ],
+  "forbidden": [
+   "\\b14 days\\b",
+   "\\b30 days\\b"
+  ],
+  "expected": "21 days (v3)",
+  "tags": [
+   "refund"
+  ]
+ },
+ {
+  "id": "latest-refund-method",
+  "question": "How quickly are refunds paid back to the customer's card?",
+  "intent": "latest",
+  "doc": "refund-policy",
+  "versions": null,
+  "facts": [
+   "\\b5 business days\\b|five business days"
+  ],
+  "forbidden": [
+   "\\b10 business days\\b"
+  ],
+  "expected": "within 5 business days (v3; v1 and v2 said 10)",
+  "tags": [
+   "refund"
+  ]
+ },
+ {
+  "id": "latest-retention-audit",
+  "question": "How long are security audit logs kept?",
+  "intent": "latest",
+  "doc": "data-retention",
+  "versions": null,
+  "facts": [
+   "\\b2 years\\b|two years"
+  ],
+  "forbidden": [
+   "\\b1 year\\b|one year"
+  ],
+  "expected": "2 years (v3)",
+  "tags": [
+   "retention"
+  ]
+ },
+ {
+  "id": "latest-retention-account",
+  "question": "How long is customer account data kept after the account is closed?",
+  "intent": "latest",
+  "doc": "data-retention",
+  "versions": null,
+  "facts": [
+   "\\b5 years\\b|five years"
+  ],
+  "forbidden": [
+   "\\b7 years\\b|seven years"
+  ],
+  "expected": "5 years after closure (v3; v1 and v2 said 7)",
+  "tags": [
+   "retention"
+  ]
+ },
+ {
+  "id": "latest-leave-annual",
+  "question": "How many days of paid annual leave do full-time employees get?",
+  "intent": "latest",
+  "doc": "leave-policy",
+  "versions": null,
+  "facts": [
+   "\\b25\\b"
+  ],
+  "forbidden": [
+   "\\b20 days\\b"
+  ],
+  "expected": "25 days",
+  "tags": [
+   "leave"
+  ]
+ },
+ {
+  "id": "latest-leave-remote",
+  "question": "How many days a year can employees work remotely from abroad?",
+  "intent": "latest",
+  "doc": "leave-policy",
+  "versions": null,
+  "facts": [
+   "\\b20\\b"
+  ],
+  "forbidden": [],
+  "expected": "20 working days (section only in v3)",
+  "tags": [
+   "leave"
+  ]
+ },
+ {
+  "id": "latest-leave-focus",
+  "question": "What is the notice period for annual leave requests?",
+  "intent": "latest",
+  "doc": "leave-policy",
+  "versions": null,
+  "facts": [
+   "\\b2 weeks\\b|two weeks"
+  ],
+  "forbidden": [],
+  "expected": "at least 2 weeks; the document is picked in the UI",
+  "tags": [
+   "leave",
+   "focus"
+  ],
+  "doc_id": "leave-policy"
+ },
+ {
+  "id": "latest-travel-hotel",
+  "question": "How much is reimbursed per hotel night?",
+  "intent": "latest",
+  "doc": "travel-expense-policy",
+  "versions": null,
+  "facts": [
+   "\\b180\\b"
+  ],
+  "forbidden": [
+   "\\b150\\b"
+  ],
+  "expected": "180 EUR per night (v2.0; earlier versions said 150)",
+  "tags": [
+   "travel",
+   "db"
+  ]
+ },
+ {
+  "id": "latest-travel-alcohol",
+  "question": "Can I expense alcohol on a business trip?",
+  "intent": "latest",
+  "doc": "travel-expense-policy",
+  "versions": null,
+  "facts": [
+   "client dinner"
+  ],
+  "forbidden": [
+   "not reimbursable"
+  ],
+  "expected": "only for client dinners, up to 30 EUR per person",
+  "tags": [
+   "travel",
+   "db"
+  ]
+ },
+ {
+  "id": "latest-semver-major",
+  "question": "When must I increment the major version in semantic versioning?",
+  "intent": "latest",
+  "doc": "semver/semver",
+  "versions": null,
+  "facts": [
+   "incompatible"
+  ],
+  "forbidden": [],
+  "expected": "for backwards incompatible API changes",
+  "tags": [
+   "semver",
+   "git"
+  ]
+ },
+ {
+  "id": "latest-semver-zeroes",
+  "question": "Can the numbers in a version have leading zeroes?",
+  "intent": "latest",
+  "doc": "semver/semver",
+  "versions": null,
+  "facts": [
+   "\\bnot\\b|\\bno\\b|MUST NOT",
+   "zero"
+  ],
+  "forbidden": [],
+  "expected": "no: MUST NOT contain leading zeroes",
+  "tags": [
+   "semver",
+   "git"
+  ]
+ },
+ {
+  "id": "latest-offtopic-dress-code",
+  "question": "What is the company's dress code?",
+  "intent": "latest",
+  "doc": null,
+  "versions": null,
+  "facts": [],
+  "forbidden": [],
+  "expected": "not covered by the documents",
+  "tags": [
+   "off-topic"
+  ],
+  "insufficient": true
+ },
+ {
+  "id": "latest-offtopic-password",
+  "question": "How do I reset my laptop password?",
+  "intent": "latest",
+  "doc": null,
+  "versions": null,
+  "facts": [],
+  "forbidden": [],
+  "expected": "not covered by the documents",
+  "tags": [
+   "off-topic"
+  ],
+  "insufficient": true
+ },
+ {
+  "id": "version-refund-label",
+  "question": "What was the refund window in version 2 of the refund policy?",
+  "intent": "version",
+  "doc": "refund-policy",
+  "versions": [
+   "v2"
+  ],
+  "facts": [
+   "\\b14\\b"
+  ],
+  "forbidden": [
+   "\\b21\\b",
+   "\\b30 days\\b"
+  ],
+  "expected": "14 days",
+  "tags": [
+   "refund"
+  ]
+ },
+ {
+  "id": "version-refund-date",
+  "question": "What was the refund window in March 2024?",
+  "intent": "version",
+  "doc": "refund-policy",
+  "versions": [
+   "v1"
+  ],
+  "facts": [
+   "\\b30\\b"
+  ],
+  "forbidden": [
+   "\\b14 days\\b",
+   "\\b21\\b"
+  ],
+  "expected": "30 days (v1 was in effect)",
+  "tags": [
+   "refund",
+   "date"
+  ]
+ },
+ {
+  "id": "version-refund-old",
+  "question": "What did the old refund policy say about restocking fees?",
+  "intent": "version",
+  "doc": "refund-policy",
+  "versions": [
+   "v2"
+  ],
+  "facts": [
+   "15\\s?%"
+  ],
+  "forbidden": [],
+  "expected": "15% on opened electronics, waived for defective items (v2 = second newest)",
+  "tags": [
+   "refund",
+   "previous"
+  ]
+ },
+ {
+  "id": "version-retention-previous",
+  "question": "What did the previous version of the data retention standard say about account data?",
+  "intent": "version",
+  "doc": "data-retention",
+  "versions": [
+   "v2"
+  ],
+  "facts": [
+   "\\b7 years\\b|seven years"
+  ],
+  "forbidden": [
+   "\\b5 years\\b"
+  ],
+  "expected": "7 years after closure (v2)",
+  "tags": [
+   "retention",
+   "previous"
+  ]
+ },
+ {
+  "id": "version-retention-v1-deletion",
+  "question": "In version 1 of the data retention standard, how many days did a deletion request take?",
+  "intent": "version",
+  "doc": "data-retention",
+  "versions": [
+   "v1"
+  ],
+  "facts": [
+   "\\b45\\b"
+  ],
+  "forbidden": [
+   "\\b30 days\\b"
+  ],
+  "expected": "45 days",
+  "tags": [
+   "retention"
+  ]
+ },
+ {
+  "id": "version-retention-date",
+  "question": "How long were application logs kept in January 2025?",
+  "intent": "version",
+  "doc": "data-retention",
+  "versions": [
+   "v2"
+  ],
+  "facts": [
+   "\\b30 days\\b"
+  ],
+  "forbidden": [
+   "\\b90 days\\b"
+  ],
+  "expected": "30 days (v2 was in effect; v1 said 90)",
+  "tags": [
+   "retention",
+   "date"
+  ]
+ },
+ {
+  "id": "version-leave-v1",
+  "question": "What did the leave policy v1 say about parental leave for secondary caregivers?",
+  "intent": "version",
+  "doc": "leave-policy",
+  "versions": [
+   "v1"
+  ],
+  "facts": [
+   "\\b2 weeks\\b|two weeks"
+  ],
+  "forbidden": [
+   "\\b4 weeks\\b"
+  ],
+  "expected": "2 weeks",
+  "tags": [
+   "leave"
+  ]
+ },
+ {
+  "id": "version-leave-date",
+  "question": "How many days of annual leave did employees get in August 2023?",
+  "intent": "version",
+  "doc": "leave-policy",
+  "versions": [
+   "v1"
+  ],
+  "facts": [
+   "\\b20\\b"
+  ],
+  "forbidden": [
+   "\\b25 days\\b"
+  ],
+  "expected": "20 days (v1 was in effect)",
+  "tags": [
+   "leave",
+   "date"
+  ]
+ },
+ {
+  "id": "version-travel-label",
+  "question": "What was the hotel limit in v1.0 of the travel policy?",
+  "intent": "version",
+  "doc": "travel-expense-policy",
+  "versions": [
+   "v1.0"
+  ],
+  "facts": [
+   "\\b150\\b"
+  ],
+  "forbidden": [
+   "\\b180\\b"
+  ],
+  "expected": "150 EUR per night",
+  "tags": [
+   "travel",
+   "db"
+  ]
+ },
+ {
+  "id": "version-travel-claims",
+  "question": "What was the claim submission deadline in v1.1 of the travel policy?",
+  "intent": "version",
+  "doc": "travel-expense-policy",
+  "versions": [
+   "v1.1"
+  ],
+  "facts": [
+   "\\b60 days\\b"
+  ],
+  "forbidden": [
+   "\\b30 days\\b"
+  ],
+  "expected": "60 days",
+  "tags": [
+   "travel",
+   "db"
+  ]
+ },
+ {
+  "id": "version-travel-previous",
+  "question": "What did the previous travel policy say about the hotel limit?",
+  "intent": "version",
+  "doc": "travel-expense-policy",
+  "versions": [
+   "v1.1"
+  ],
+  "facts": [
+   "\\b150\\b"
+  ],
+  "forbidden": [
+   "\\b180\\b"
+  ],
+  "expected": "150 EUR (v1.1 = second newest)",
+  "tags": [
+   "travel",
+   "db",
+   "previous"
+  ]
+ },
+ {
+  "id": "version-semver-prerelease",
+  "question": "What did semver 1.0.0 say about pre-release versions?",
+  "intent": "version",
+  "doc": "semver/semver",
+  "versions": [
+   "v1.0.0"
+  ],
+  "facts": [
+   "dash"
+  ],
+  "forbidden": [],
+  "expected": "appended with a dash",
+  "tags": [
+   "semver",
+   "git"
+  ]
+ },
+ {
+  "id": "compare-refund-labels",
+  "question": "What changed between v1 and v3 of the refund policy?",
+  "intent": "compare",
+  "doc": "refund-policy",
+  "versions": [
+   "v1",
+   "v3"
+  ],
+  "facts": [
+   "\\b30\\b",
+   "\\b21\\b"
+  ],
+  "forbidden": [],
+  "expected": "window 30 -> 21 days; method 10 -> 5 days; gift cards",
+  "tags": [
+   "refund"
+  ]
+ },
+ {
+  "id": "compare-refund-focused",
+  "question": "How did the restocking fee rules change in v2 of the refund policy?",
+  "intent": "compare",
+  "doc": "refund-policy",
+  "versions": [
+   "v1",
+   "v2"
+  ],
+  "facts": [
+   "15\\s?%",
+   "defective"
+  ],
+  "forbidden": [],
+  "expected": "no fee -> 15% on opened electronics, waived for defective items",
+  "tags": [
+   "refund",
+   "focused"
+  ],
+  "only_sections": [
+   "Restocking"
+  ]
+ },
+ {
+  "id": "compare-leave-new",
+  "question": "What is new in the latest leave policy?",
+  "intent": "compare",
+  "doc": "leave-policy",
+  "versions": [
+   "v2",
+   "v3"
+  ],
+  "facts": [
+   "\\b10\\b",
+   "\\b5\\b",
+   "remote"
+  ],
+  "forbidden": [],
+  "expected": "carry-over 5 -> 10 days, certificate after 5 days, remote work abroad",
+  "tags": [
+   "leave"
+  ]
+ },
+ {
+  "id": "compare-retention-labels",
+  "question": "What changed between v2 and v3 of the data retention standard?",
+  "intent": "compare",
+  "doc": "data-retention",
+  "versions": [
+   "v2",
+   "v3"
+  ],
+  "facts": [
+   "\\b5 years\\b|five years",
+   "\\b2 years\\b|two years"
+  ],
+  "forbidden": [],
+  "expected": "account data 7 -> 5 years; audit logs 1 -> 2 years",
+  "tags": [
+   "retention"
+  ]
+ },
+ {
+  "id": "compare-retention-new",
+  "question": "What is new in the latest data retention standard?",
+  "intent": "compare",
+  "doc": "data-retention",
+  "versions": [
+   "v2",
+   "v3"
+  ],
+  "facts": [
+   "\\b5 years\\b|five years",
+   "\\b2 years\\b|two years"
+  ],
+  "forbidden": [],
+  "expected": "same as v2 -> v3",
+  "tags": [
+   "retention"
+  ]
+ },
+ {
+  "id": "compare-travel-v2",
+  "question": "What changed in version 2.0 of the travel and expense policy?",
+  "intent": "compare",
+  "doc": "travel-expense-policy",
+  "versions": [
+   "v1.1",
+   "v2.0"
+  ],
+  "facts": [
+   "\\b8\\b",
+   "\\b180\\b",
+   "rail"
+  ],
+  "forbidden": [],
+  "expected": "flights under 8 h, alcohol for client dinners, hotel 180, rail travel",
+  "tags": [
+   "travel",
+   "db"
+  ]
+ },
+ {
+  "id": "compare-travel-labels",
+  "question": "How do v1.0 and v1.1 of the travel policy differ?",
+  "intent": "compare",
+  "doc": "travel-expense-policy",
+  "versions": [
+   "v1.0",
+   "v1.1"
+  ],
+  "facts": [
+   "\\b50\\b",
+   "\\b60\\b"
+  ],
+  "forbidden": [],
+  "expected": "meal allowance 50 -> 60 EUR, claims 30 -> 60 days",
+  "tags": [
+   "travel",
+   "db"
+  ]
+ },
+ {
+  "id": "compare-semver",
+  "question": "What changed in semver 2.0.0 compared to 1.0.0?",
+  "intent": "compare",
+  "doc": "semver/semver",
+  "versions": [
+   "v1.0.0",
+   "v2.0.0"
+  ],
+  "facts": [
+   "build metadata"
+  ],
+  "forbidden": [],
+  "expected": "build metadata added, pre-release uses a hyphen, no leading zeroes",
+  "tags": [
+   "semver",
+   "git"
+  ]
+ },
+ {
+  "id": "compare-unchanged",
+  "question": "Did the notice period for annual leave change between v1 and v3 of the leave policy?",
+  "intent": "compare",
+  "doc": "leave-policy",
+  "versions": [
+   "v1",
+   "v3"
+  ],
+  "facts": [
+   "(?#answer)\\bno\\b|not|unchanged|same|did not"
+  ],
+  "forbidden": [],
+  "expected": "no, it stayed at 2 weeks",
+  "tags": [
+   "leave",
+   "hard"
+  ]
+ },
+ {
+  "id": "unclear-refund-v7",
+  "question": "What did version 7 of the refund policy say?",
+  "intent": "unclear",
+  "doc": "refund-policy",
+  "versions": [],
+  "facts": [
+   "v1, v2, v3"
+  ],
+  "forbidden": [],
+  "expected": "asks again and lists v1, v2, v3",
+  "tags": [
+   "refund"
+  ]
+ },
+ {
+  "id": "unclear-travel-v9",
+  "question": "What did version 9 of the travel policy say?",
+  "intent": "unclear",
+  "doc": "travel-expense-policy",
+  "versions": [],
+  "facts": [
+   "v1\\.0",
+   "v1\\.1",
+   "v2\\.0"
+  ],
+  "forbidden": [],
+  "expected": "asks again and lists v1.0, v1.1, v2.0",
+  "tags": [
+   "travel",
+   "db"
+  ]
+ },
+ {
+  "id": "unclear-no-doc",
+  "question": "What changed in version 3?",
+  "intent": "unclear",
+  "doc": null,
+  "versions": null,
+  "facts": [
+   "Refund",
+   "Leave",
+   "Retention"
+  ],
+  "forbidden": [],
+  "expected": "asks which document (refund, leave and retention all have v3)",
+  "tags": [
+   "no-doc"
+  ]
+ }
+]
