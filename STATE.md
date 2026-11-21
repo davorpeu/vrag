@@ -158,3 +158,18 @@ Next (queue, see agents/runs/2026-11-20/BOARD.md):
 2. Q8 fusion: kNN-only beats hybrid on retrieval (R@6 0.978 vs 0.899): weighted RRF.
 3. Fix/remove the react/CLAUDE router case. Q1 review, Q2 num_ctx + compact catalog, Q3 S3 in API+UI,
    Q5 history questions, Q6 upload version, Q7 README, L2 react fix in vrag-chunks, user router check in UI.
+
+## Wave 2, 2026-11-20/21 (branch run-2026-11-20)
+- Router (W4): several docs share the version and none named -> ask which doc; general question, no doc -> latest. eval_router 28/28.
+- Fusion (W5): weighted RRF, BM25 1 : kNN 20 (RRF_BM25_WEIGHT / RRF_KNN_WEIGHT). Retrieval MRR 0.806 -> 0.887,
+  R@6 0.910 -> 0.978. Compare answers must name every changed value. Answer eval 36/37 (was 33/37).
+  Rerank on top of the new fusion not measured yet (RAM).
+- Repo activity (W6, src/vrag/activity.py): shallow clone of a time window, git log --numstat, one ES doc per
+  commit in index vrag-activity; time windows parsed in code; files/dirs counted in code; the LLM only names
+  themes from commit lines and cites shas (made-up shas dropped). CLI `vrag activity sync|ask`, API /activity/*,
+  UI "Repo activity" toggle. Live-tested on fastapi and ollama. Limits: 500-commit cap not reported, generic themes.
+- Fast suite 239 pass. SETUP.md = how to set the project up on a new machine.
+
+Next: measure rerank on 1:20 fusion; activity: report the commit cap, cluster themes in code, per-author and
+per-folder questions, activity eval cases; Q1 code review; Q3 S3 in API+UI; Q5 history questions; Q7 README;
+merge run-2026-11-20 into master.
