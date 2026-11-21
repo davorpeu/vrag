@@ -142,14 +142,27 @@ def _key_words(text: str) -> set[str]:
     return {w for w in re.findall(r"[a-z0-9%]+", text.lower()) if w not in STOP and (len(w) > 3 or w.isdigit())}
 
 
+def _phrase(text: str) -> str:
+    return " ".join(re.findall(r"[a-z0-9%]+", text.lower()))
+
+
 def mentions_change(answer: str, c: ClauseChange) -> bool:
-    """Does the answer talk about this change? Checks the words that actually changed
-    ("14" -> "21") for modifications, and the clause's own key words for added/removed ones."""
+    """Does the answer talk about this change? For a modification, the changed value is its identity.
+    A changed run with a number ("1 year" -> "2 years") must appear as that exact phrase: a lone "2" or the
+    word "years" also shows up in section numbers and in other changes. Other modifications use the changed
+    key words. Added/removed clauses use their own key words."""
     said = _key_words(answer)
     if c.kind == "modified":
-        changed = set()
+        text = f" {_phrase(answer)} "
+        changed: set[str] = set()
+        phrases: list[str] = []
         for a, b in word_changes(c.old_text, c.new_text):
+            run = _phrase(b) or _phrase(a)
+            if any(ch.isdigit() for ch in run):
+                phrases.append(run)
             changed |= _key_words(b) or _key_words(a)
+        if phrases:
+            return any(f" {p} " in text for p in phrases)
         return not changed or bool(changed & said)
     words = _key_words(c.new_text or c.old_text)
     return len(words & said) >= min(3, len(words))

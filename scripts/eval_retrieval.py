@@ -341,12 +341,44 @@ def mode_search(mode: str) -> Search:
     raise ValueError(f"unknown mode {mode!r}; pick from {', '.join(MODES)}")
 
 
+def sweep(spec: str, cases: list[dict], resolved: list[list[set[str]]], label_text: str = "") -> int:
+    """Fusion weights sweep: BM25 and kNN hits are fetched once per case, then fused with each weight pair."""
+    s = get_settings()
+    pairs = [tuple(float(x) for x in p.split(":")) for p in spec.split(",")]
+    raw = []
+    for case in cases:
+        f = filters_for(case["filter"])
+        raw.append((store.bm25_hits(case["q"], f), store.knn_hits(case["q"], f)))
+    runs = {}
+    for wb, wk in pairs:
+        rows = []
+        for case, items, (bm25, knn) in zip(cases, resolved, raw):
+            ranking = store.fuse(bm25, knn, wb, wk, s.rrf_k)[:DEPTH]
+            rows.append({"id": case["id"], **score_case(case, items, ranking), "ms": 0.0})
+        runs[f"{wb:g}:{wk:g}"] = {"warmup_ms": 0, "rss_mb": None, "cases": rows, "summary": summarize({"cases": rows}, cases)}
+    print(f"\nfusion sweep, weights bm25:knn, rrf_k={s.rrf_k}, index {s.es_index}\n{'weights':8}{HEAD}")
+    for name, run in runs.items():
+        print(f"{name:8}{_fmt(run['summary']['overall'])}")
+    for group in ("kind", "tag", "doc"):
+        print(f"\nper {group}: R@1 / R@6 / MRR")
+        print(f"{'':24}{'n':>4}  " + "  ".join(f"{m:>15}" for m in runs))
+        first = next(iter(runs.values()))["summary"]["groups"][group]
+        for k in first:
+            cells = [
+                "{recall@1:.2f}/{recall@6:.2f}/{mrr:.2f}".format(**r["summary"]["groups"][group][k]) for r in runs.values()
+            ]
+            print(f"{k:24}{first[k]['n']:>4}  " + "  ".join(f"{c:>15}" for c in cells))
+    print(f"\nsaved {save(runs, cases, label_text or 'sweep')}")
+    return 0
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     p.add_argument("--modes", default=",".join(MODES), help="comma-separated: " + ", ".join(MODES))
     p.add_argument("--model", help="cross-encoder for the rerank mode (default: settings.rerank_model)")
     p.add_argument("--candidates", type=int, help="how many fused hits the cross-encoder reorders")
     p.add_argument("--label", default="", help="added to the results file name")
+    p.add_argument("--sweep", help="BM25:kNN weight pairs for the fusion, e.g. 1:0,1:1,1:2,1:4,0:1 (only the fusion, no rerank)")
     p.add_argument("--check", action="store_true", help="only check the cases against the index")
     p.add_argument("--verbose", action="store_true")
     args = p.parse_args()
@@ -364,6 +396,8 @@ def main() -> int:
     if errors or args.check:
         return 1 if errors else 0
 
+    if args.sweep:
+        return sweep(args.sweep, cases, resolved, args.label)
     modes = [m.strip() for m in args.modes.split(",") if m.strip()]
     runs = {}
     for mode in modes:

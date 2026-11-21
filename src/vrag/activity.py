@@ -15,7 +15,6 @@ tree on disk. The 7 extra days plus `fetch --deepen=1` give the oldest commit of
 numstat is a real diff. Commits listed in .git/shallow (no parent) are dropped anyway.
 """
 
-import os
 import re
 import subprocess
 from collections import defaultdict
@@ -46,7 +45,7 @@ class ActivityError(ValueError):
 
 
 def index_name() -> str:
-    return os.getenv("ACTIVITY_INDEX", "vrag-activity")
+    return get_settings().activity_index
 
 
 # -- repo identity ---------------------------------------------------------------------

@@ -172,12 +172,21 @@ def compare_filters(doc_id: str, versions: list[str]) -> list[dict]:
     return [{"term": {"doc_id": doc_id}}, {"terms": {"version": list(versions)}}]
 
 
-def _rrf(rankings: list[list[str]], k: int) -> list[str]:
+def _rrf(rankings: list[list[str]], k: int, weights: list[float] | None = None) -> list[str]:
+    """Weighted reciprocal rank fusion: score = sum of weight / (k + rank). Ties keep first-seen order."""
+    weights = weights or [1.0] * len(rankings)
     scores: dict[str, float] = {}
-    for ranking in rankings:
+    for ranking, w in zip(rankings, weights):
         for rank, doc_id in enumerate(ranking, start=1):
-            scores[doc_id] = scores.get(doc_id, 0.0) + 1.0 / (k + rank)
+            scores[doc_id] = scores.get(doc_id, 0.0) + w / (k + rank)
     return sorted(scores, key=scores.get, reverse=True)
+
+
+def fuse(bm25: list[dict], knn: list[dict], bm25_weight: float, knn_weight: float, k: int) -> list[dict]:
+    """Fuse BM25 and kNN ES hits with weighted RRF: chunk sources, best first."""
+    by_id = {h["_id"]: h["_source"] for h in bm25 + knn}
+    order = _rrf([[h["_id"] for h in bm25], [h["_id"] for h in knn]], k, [bm25_weight, knn_weight])
+    return [by_id[i] for i in order]
 
 
 def bm25_hits(question: str, filters: list[dict], size: int | None = None) -> list[dict]:
@@ -212,7 +221,7 @@ def knn_hits(question: str, filters: list[dict], size: int | None = None) -> lis
 def hybrid_search(
     question: str, filters: list[dict] | None = None, top_k: int | None = None, rerank: bool | None = None
 ) -> list[dict]:
-    """BM25 + kNN fused with RRF. With reranking on, a cross-encoder then reorders the top
+    """BM25 + kNN fused with weighted RRF (settings.rrf_bm25_weight / rrf_knn_weight). With reranking on, a cross-encoder then reorders the top
     settings.rerank_candidates fused hits (the rest keep the RRF order). Returns the top_k chunks.
 
     rerank: None follows settings.rerank; True/False overrides it for this call.
@@ -220,8 +229,7 @@ def hybrid_search(
     s = get_settings()
     filters = filters or latest_filters()
     bm25, knn = bm25_hits(question, filters), knn_hits(question, filters)
-    by_id = {h["_id"]: h["_source"] for h in bm25 + knn}
-    fused = [by_id[i] for i in _rrf([[h["_id"] for h in bm25], [h["_id"] for h in knn]], s.rrf_k)]
+    fused = fuse(bm25, knn, s.rrf_bm25_weight, s.rrf_knn_weight, s.rrf_k)
     if s.rerank if rerank is None else rerank:
         head = fused[: s.rerank_candidates]
         fused = reranking.get(s.rerank_model, s.models_dir).rerank(question, head) + fused[len(head) :]

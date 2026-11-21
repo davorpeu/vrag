@@ -8,6 +8,7 @@ class Settings(BaseSettings):
 
     es_url: str = "http://localhost:9200"
     es_index: str = "vrag-chunks"
+    activity_index: str = "vrag-activity"
 
     ollama_base_url: str = "http://localhost:11434"
     llm_model: str = "qwen2.5:7b"
@@ -33,6 +34,9 @@ class Settings(BaseSettings):
     top_k: int = 6
     candidates: int = 30
     rrf_k: int = 60
+    # Weighted RRF: a hit scores weight / (rrf_k + rank) per ranking. Equal weights = plain RRF.
+    rrf_bm25_weight: float = 1.0
+    rrf_knn_weight: float = 20.0
 
     # Reranking (rerank.py): a cross-encoder reorders the top fused hits. Measured with
     # scripts/eval_retrieval.py. Model files are cached in models_dir (downloaded on first use).

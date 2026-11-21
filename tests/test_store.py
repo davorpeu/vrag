@@ -28,6 +28,8 @@ def search(monkeypatch):
     monkeypatch.setattr(rerank, "get", lambda model, cache: fake)
     s = get_settings()
     monkeypatch.setattr(s, "rerank", False)
+    monkeypatch.setattr(s, "rrf_bm25_weight", 1.0)  # equal weights: the orders below assume plain RRF
+    monkeypatch.setattr(s, "rrf_knn_weight", 1.0)
     monkeypatch.setattr(s, "rerank_candidates", 3)
     monkeypatch.setattr(s, "top_k", 4)
     return fake
@@ -49,6 +51,31 @@ def test_rrf_orders_by_fused_score():
     assert store._rrf([["a", "b", "c"], ["c", "b", "a"]], 60) == ["a", "c", "b"]
     assert store._rrf([["a", "b"], ["a", "c"]], 60)[0] == "a"
     assert store._rrf([["a"], ["b"]], 60) == ["a", "b"]
+
+
+def test_rrf_weights():
+    bm25, knn = ["a", "b"], ["b", "a"]
+    assert store._rrf([bm25, knn], 60, [1, 3])[0] == "b"  # knn heavy: knn's first wins
+    assert store._rrf([bm25, knn], 60, [3, 1])[0] == "a"
+    assert store._rrf([bm25, knn], 60, [0, 1]) == ["b", "a"]  # weight 0 = that search only breaks no ties
+    assert store._rrf([bm25, knn], 60) == store._rrf([bm25, knn], 60, [1, 1])
+
+
+def test_fuse_uses_weights():
+    bm = [{"_id": f"c{i}", "_source": doc(i)} for i in range(3)]
+    kn = [{"_id": f"c{i}", "_source": doc(i)} for i in (2, 1, 0)]
+    assert ids(store.fuse(bm, kn, 1, 10, 60)) == ["c2", "c1", "c0"]
+    assert ids(store.fuse(bm, kn, 10, 1, 60)) == ["c0", "c1", "c2"]
+
+
+def test_hybrid_search_follows_weight_settings(search, monkeypatch):
+    monkeypatch.setattr(get_settings(), "rrf_knn_weight", 20.0)
+    assert ids(store.hybrid_search("q")) == ["c3", "c2", "c1", "c0"]
+
+
+def test_default_weights_favor_knn():
+    s = type(get_settings())(_env_file=None)
+    assert s.rrf_knn_weight > s.rrf_bm25_weight > 0
 
 
 def test_no_rerank_by_default(search):
