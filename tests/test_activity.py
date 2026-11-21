@@ -59,7 +59,8 @@ def test_topic_words():
 
 
 def commit(repo, days_ago, message, files, author="Ann"):
-    when = (datetime.now(timezone.utc) - timedelta(days=days_ago)).strftime("%Y-%m-%dT12:00:00+00:00")
+    # noon local time on the local calendar day: "yesterday" in the app is a local date, so UTC would break near midnight
+    when = (datetime.now().astimezone().replace(hour=12, minute=0, second=0, microsecond=0) - timedelta(days=days_ago)).isoformat()
     for path, text in files.items():
         p = repo / path
         p.parent.mkdir(parents=True, exist_ok=True)
