@@ -19,3 +19,15 @@ Permission prompts: workers were switched to auto mode (seen 22:14); lead still 
 Refuse (Esc) and ask the user about: installs that change versions, deletes outside scratch, docker down/-v,
 writes to vrag-chunks, git writes. Watcher: `sh agents/runs/2026-11-20/watch.sh` (background), exits on a
 new report or a worker not "working".
+
+## Wave 2 (started after commit 681e887, branch run-2026-11-20)
+W4 router (w2M, vrag-w4-router), W5 answer+fusion (w2N, vrag-w5-fusion), W6 repo activity (w2P, vrag-w6-activity).
+User goal: test the app with active GitHub repos, ask "what was done recently and in which files" -> W6.
+When W6 is done: merge ACTIVITY_INDEX into config.py, restart API + UI in herdr panes for the user's test
+(API :8000, Streamlit :8501), load 1-2 repos for them. Commit each task on run-2026-11-20.
+User decision: restart W5 (pane w2N, partial files in tree) only AFTER W6 reports. Restart: in w2N run
+`claude --model sonnet --permission-mode acceptEdits "You are worker W5. Read agents/runs/2026-11-20/brief-W5.md. Your previous run crashed (low RAM) mid-task: continue your partial files, don't start over."`
+Lead watcher was killed by Claude Code for low memory; don't restart it unless the user asks.
+App for the user's test (2026-11-21): herdr workspace vrag-app (w2Q). API in w2Q:p1 (uvicorn 127.0.0.1:8000,
+tracing off), UI in w2Q:p2 (streamlit :8501, API_URL=http://127.0.0.1:8000). Both running from branch run-2026-11-20.
+After W5 lands, restart the API (Ctrl+C in w2Q:p1, rerun) to pick up its changes.

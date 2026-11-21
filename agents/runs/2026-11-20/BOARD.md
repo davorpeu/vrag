@@ -18,6 +18,15 @@ Not owned by anyone (ask the lead): router.py, diff.py, grounding.py, chunking.p
 models.py, api.py, sources/{base,folder,git,db,remote}.py, ui/**, other tests, scripts/build_eval_index.py,
 scripts/seed_db.py, scripts/eval_router.py, scripts/eval_diff.py, tests/e2e/conftest.py, .env.
 
+## Running, wave 2 (herdr, Sonnet, auto mode; started after the W1-W3 commits)
+| id | task | pane | files owned |
+|----|------|------|-------------|
+| W4 | router fixes from W3 eval | w2M:p1 | src/vrag/router.py, tests/test_router.py, data/golden/router_cases.json, data/golden/answer_cases.json |
+| W5 | compare-answer fix + weighted fusion | w2N:p1 | src/vrag/answer.py, src/vrag/store.py, src/vrag/config.py, .env.example, scripts/eval_retrieval.py, tests/test_store.py, tests/test_answer_compare.py (new) |
+| W6 | repo activity feature | w2P:p1 | src/vrag/activity.py (new), src/vrag/api.py, src/vrag/cli.py, ui/streamlit_app.py, tests/test_activity.py (new), tests/test_api_activity.py (new), tests/test_ui.py |
+W6 needs a setting ACTIVITY_INDEX: it reads it with os.getenv in activity.py (config.py belongs to W5); lead merges later.
+Scratch indexes: vrag-dev-w4/w5/w6 (lowercase). LLM lock as before.
+
 ## Queue (later)
 Q1 code review, Q2 num_ctx + compact router catalog, Q3 S3 in API+UI, Q4 fixes from W3 eval,
 Q5 history questions, Q6 upload version from UI, Q7 README, L2 react fix in vrag-chunks, L3 user router check.
@@ -32,3 +41,8 @@ Q5 history questions, Q6 upload version from UI, Q7 README, L2 react fix in vrag
   Q8 weighted RRF / kNN-heavier fusion. answer.py changed during W3's eval run (behaviour same with rerank off).
 - W3 answer eval (reports/W3.md): 33/37; failures -> Q4 (router.py x3, answer.py x1).
 - L1 lead: S3 synced into vrag-eval; eval_diff OK; eval_router 27/28 (react/CLAUDE case not in vrag-eval); S3 live e2e pass.
+- W4 router (reports/W4.md): committed 4664e30. eval_router 28/28, failed-3 now pass; full eval_answers NOT run (killed, low RAM).
+- 23:xx low-RAM event: W5's claude process died mid-task (pane w2N back at shell; partial answer.py/store.py/config.py/
+  .env.example/eval_retrieval.py/test_store.py/test_answer_compare.py in tree). Lead watcher killed too. Stale lock removed.
+  Big RAM users not ours: tomcat9 ~2.1 GB, firefox, Discord.
+- W6 repo activity (reports/W6.md): committed 55404c9; 69 tests pass. Live: fastapi + ollama answered. W5 restarted after W6 (user).
